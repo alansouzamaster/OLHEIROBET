@@ -28,7 +28,7 @@ def calcular_poisson(media, alvo):
 
 # --- INTERFACE ---
 st.set_page_config(page_title="OLHEIROBET PRO", layout="wide")
-st.title("⚽ OlheiroBet: Inteligência Esportiva")
+st.title("⚽ OlheiroBet:")
 
 # 1. Buscar Jogos do Dia
 @st.cache_data(ttl=3600)
@@ -98,6 +98,7 @@ if jogos:
         st.info("Selecione uma ou mais ligas na barra lateral para listar os jogos.")
 else:
     st.error("Não foi possível carregar os jogos. Verifique sua chave API ou o limite de créditos.")
+
 
 
 
