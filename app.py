@@ -20,7 +20,7 @@ def calcular_poisson(media, alvo):
 
 def prever_1x2(m_casa, m_fora):
     total = m_casa + m_fora
-    p_draw = 26.0 # Média estatística de empate no futebol
+    p_draw = 26.0 
     sobra = 100 - p_draw
     p_home = sobra * (m_casa / total) if total > 0 else 37.0
     p_away = sobra * (m_fora / total) if total > 0 else 37.0
@@ -65,7 +65,7 @@ def carregar_jogos(data_str):
 jogos = carregar_jogos(data_sel.strftime('%Y-%m-%d'))
 
 if jogos:
-    # --- 1. FILTRO JOGOS QUENTES (AUTO-SCANNER) ---
+    # --- JOGOS QUENTES ---
     st.subheader("🔥 Melhores Oportunidades do Dia (+2.5 Gols)")
     quentes = []
     for j in jogos:
@@ -80,52 +80,3 @@ if jogos:
             with cols_q[i]:
                 st.markdown(f"""
                 <div class='oportunidade-card'>
-                    <small>{q['obj']['tournament']['name']}</small><br>
-                    <strong>{q['obj']['homeTeam']['name']} x {q['obj']['awayTeam']['name']}</strong><br>
-                    <span style='color: #ffc107;'>Prob. Gols: {q['prob']:.1f}%</span>
-                </div>
-                """, unsafe_allow_html=True)
-    
-    st.write("---")
-
-    # --- 2. SELEÇÃO DE JOGO ---
-    todas_ligas = sorted(list(set([j['tournament']['name'] for j in jogos])))
-    ligas_sel = st.sidebar.multiselect("Filtre as Ligas (Ex: Brazil):", todas_ligas)
-    jogos_filtrados = [j for j in jogos if j['tournament']['name'] in ligas_sel]
-
-    if jogos_filtrados:
-        lista_nomes = {f"{j['tournament']['name']} | {j['homeTeam']['name']} x {j['awayTeam']['name']}": j for j in jogos_filtrados}
-        escolha = st.selectbox("🎯 Selecione a partida para análise detalhada:", list(lista_nomes.keys()))
-        jogo_foco = lista_nomes[escolha]
-        
-        # --- CABEÇALHO H2H ---
-        c_h, c_v, c_a = st.columns([2, 1, 2])
-        with c_h:
-            st.markdown(f"<h3 style='text-align: center;'>{jogo_foco['homeTeam']['name']}</h3>", unsafe_allow_html=True)
-            st.markdown(f"<div style='text-align: center;'>{exibir_forma(['V','V','E','D','V'])}</div>", unsafe_allow_html=True)
-        with c_v:
-            st.markdown("<h2 style='text-align: center; color: #30363d;'>VS</h2>", unsafe_allow_html=True)
-        with c_a:
-            st.markdown(f"<h3 style='text-align: center;'>{jogo_foco['awayTeam']['name']}</h3>", unsafe_allow_html=True)
-            st.markdown(f"<div style='text-align: center;'>{exibir_forma(['D','E','D','D','V'])}</div>", unsafe_allow_html=True)
-
-        if st.button("🔍 EXECUTAR ANÁLISE COMPLETA"):
-            m_casa, m_fora = 1.8, 1.2
-            m_gols, m_cantos, m_cartoes = (m_casa + m_fora), 10.4, 4.8
-            p_h, p_e, p_a = prever_1x2(m_casa, m_fora)
-
-            # --- RESULTADO 1X2 ---
-            st.markdown("### 📊 Probabilidades Resultado Final (1X2)")
-            r1, rX, r2 = st.columns(3)
-            r1.markdown(f"<div class='1x2-box' style='background-color: #1f77b4;'>Casa: {p_h:.1f}%</div>", unsafe_allow_html=True)
-            rX.markdown(f"<div class='1x2-box' style='background-color: #444;'>Empate: {p_e:.1f}%</div>", unsafe_allow_html=True)
-            r2.markdown(f"<div class='1x2-box' style='background-color: #dc3545;'>Visitante: {p_a:.1f}%</div>", unsafe_allow_html=True)
-
-            # --- MULTI-MERCADOS ---
-            st.markdown("<br>", unsafe_allow_html=True)
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.markdown("<div class='mercado-titulo'>⚽ GOLS</div>", unsafe_allow_html=True)
-                st.metric("Over 0.5", f"{calcular_poisson(m_gols, 0):.1f}%")
-                st.metric("Over 1.5", f"{calcular_poisson(m_gols,
