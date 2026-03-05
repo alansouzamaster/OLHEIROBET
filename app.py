@@ -31,7 +31,6 @@ def prever_1x2(m_casa, m_fora):
     return p_casa, p_empate, p_fora
 
 def formatar_hora(timestamp):
-    # Converte o timestamp da API para o horário local
     return datetime.fromtimestamp(timestamp).strftime('%H:%M')
 
 def exibir_forma(resultados):
@@ -49,11 +48,11 @@ st.markdown("""
     .stApp { background-color: #0e1117; color: #e0e0e0; }
     div[data-testid="stMetricValue"] { color: #ffc107 !important; font-size: 24px !important; }
     .stMetric { background-color: #1c2128; padding: 15px; border-radius: 12px; border: 1px solid #30363d; }
-    .oportunidade-card { background-color: #1c2128; padding: 15px; border-top: 3px solid #ffc107; border-radius: 8px; margin-bottom: 10px; }
+    .oportunidade-card { background-color: #1c2128; padding: 15px; border-top: 3px solid #ffc107; border-radius: 8px; margin-bottom: 10px; height: 160px;}
     .stButton>button { width: 100%; background-color: #ffc107 !important; color: black !important; font-weight: bold; border: none; padding: 12px; border-radius: 8px; font-size: 16px; }
     .mercado-titulo { color: #ffc107; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #333; }
     .res-box { text-align: center; padding: 10px; border-radius: 6px; font-weight: bold; color: white; }
-    .horario-badge { background-color: #333; color: #ffc107; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 14px; }
+    .horario-badge { background-color: #333; color: #ffc107; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -65,7 +64,7 @@ st.markdown("### 🛠️ FILTROS DE BUSCA")
 col_data, col_liga = st.columns([1, 2])
 
 with col_data:
-    data_sel = st.date_input("📅 Escolha a Data", value=datetime.now())
+    data_sel = st.date_input("📅 Data das Partidas", value=datetime.now())
 
 @st.cache_data(ttl=3600)
 def carregar_jogos(data_str):
@@ -80,43 +79,55 @@ jogos = carregar_jogos(data_sel.strftime('%Y-%m-%d'))
 if jogos:
     with col_liga:
         todas_ligas = sorted(list(set([j['tournament']['name'] for j in jogos])))
-        ligas_sel = st.multiselect("🏆 Selecione as Ligas", todas_ligas)
+        ligas_sel = st.multiselect("🏆 Filtrar por Ligas", todas_ligas)
 
-    # --- JOGOS QUENTES COM HORÁRIO ---
-    st.subheader("🔥 Oportunidades em Destaque")
-    quentes = [j for j in jogos if random.random() > 0.92][:4]
-    if quentes:
-        cols_q = st.columns(len(quentes))
-        for i, q in enumerate(quentes):
+    # --- SCANNER DE OPORTUNIDADES DO DIA (+2.5 GOLS) ---
+    st.subheader(f"🔥 Melhores Oportunidades de Gols - {data_sel.strftime('%d/%m')}")
+    
+    # Lógica de Scanner: Filtra jogos com média simulada alta para Over 2.5
+    lista_quentes = []
+    for j in jogos:
+        m_simulada = random.uniform(2.1, 3.5) # Em produção, aqui entraria a média real histórica
+        prob_over = calcular_poisson(m_simulada, 2)
+        if prob_over > 70: # Apenas jogos com mais de 70% de chance de Over 2.5
+            lista_quentes.append({'jogo': j, 'prob': prob_over})
+    
+    # Ordena pelos mais prováveis e pega os 4 melhores
+    lista_quentes = sorted(lista_quentes, key=lambda x: x['prob'], reverse=True)[:4]
+
+    if lista_quentes:
+        cols_q = st.columns(len(lista_quentes))
+        for i, item in enumerate(lista_quentes):
+            q = item['jogo']
+            hora = formatar_hora(q.get('startTimestamp', 0))
             with cols_q[i]:
-                prob_q = random.randint(71, 88)
-                hora = formatar_hora(q.get('startTimestamp', time.time()))
                 st.markdown(f"""
                 <div class='oportunidade-card'>
                     <span class='horario-badge'>🕒 {hora}</span><br>
-                    <small>{q['tournament']['name']}</small><br>
-                    <strong>{q['homeTeam']['name']} x {q['awayTeam']['name']}</strong><br>
-                    <span style='color:#ffc107;'>Over 2.5: {prob_q}%</span>
+                    <small style='color:#888;'>{q['tournament']['name']}</small><br>
+                    <strong style='font-size:14px;'>{q['homeTeam']['shortName'] if 'shortName' in q['homeTeam'] else q['homeTeam']['name']} x {q['awayTeam']['shortName'] if 'shortName' in q['awayTeam'] else q['awayTeam']['name']}</strong><br><br>
+                    <span style='color:#ffc107; font-weight:bold;'>Over 2.5 Gols: {item['prob']:.1f}%</span>
                 </div>
                 """, unsafe_allow_html=True)
+    else:
+        st.info("Buscando tendências de mercado para hoje...")
 
     st.write("---")
 
-    # --- SELEÇÃO DE JOGO COM HORÁRIO NO NOME ---
-    jogos_filtrados = [j for j in jogos if j['tournament']['name'] in ligas_sel]
+    # --- SELEÇÃO DE JOGO ---
+    jogos_filtrados = [j for j in jogos if j['tournament']['name'] in ligas_sel] if ligas_sel else jogos
 
     if jogos_filtrados:
-        # Adicionando o horário na lista de seleção para facilitar a identificação
         lista_nomes = {
             f"[{formatar_hora(j.get('startTimestamp'))}] {j['homeTeam']['name']} x {j['awayTeam']['name']}": j 
             for j in jogos_filtrados
         }
-        escolha = st.selectbox("🎯 Escolha uma partida para analisar:", list(lista_nomes.keys()))
+        escolha = st.selectbox("🎯 Selecione uma partida para análise detalhada:", list(lista_nomes.keys()))
         jogo_foco = lista_nomes[escolha]
         hora_foco = formatar_hora(jogo_foco.get('startTimestamp'))
         
         # --- CABEÇALHO CONFRONTO ---
-        st.markdown(f"<div style='text-align:center;'><span class='horario-badge' style='font-size:18px;'>INÍCIO ÀS {hora_foco}</span></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align:center; margin-bottom:10px;'><span class='horario-badge' style='font-size:16px;'>INÍCIO ÀS {hora_foco}</span></div>", unsafe_allow_html=True)
         c_h, c_v, c_a = st.columns([2, 1, 2])
         with c_h:
             st.markdown(f"<h2 style='text-align: center;'>{jogo_foco['homeTeam']['name']}</h2>", unsafe_allow_html=True)
@@ -129,19 +140,40 @@ if jogos:
 
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("🔍 GERAR RELATÓRIO PREDITIVO COMPLETO"):
+            # Médias para cálculo
             m_casa, m_fora = 1.8, 1.2
             m_gols = m_casa + m_fora
             m_cantos, m_cartoes = 10.5, 4.2
             
+            # Resultado 1X2
             p_c, p_e, p_f = prever_1x2(m_casa, m_fora)
             st.markdown("### 📊 Probabilidades 1X2")
             r1, r2, r3 = st.columns(3)
-            r1.markdown(f"<div class='res-box' style='background-color:#1f77b4;'>Vitória Casa: {p_c:.1f}%</div>", unsafe_allow_html=True)
+            r1.markdown(f"<div class='res-box' style='background-color:#1f77b4;'>Casa: {p_c:.1f}%</div>", unsafe_allow_html=True)
             r2.markdown(f"<div class='res-box' style='background-color:#444;'>Empate: {p_e:.1f}%</div>", unsafe_allow_html=True)
-            r3.markdown(f"<div class='res-box' style='background-color:#dc3545;'>Vitória Visitante: {p_f:.1f}%</div>", unsafe_allow_html=True)
+            r3.markdown(f"<div class='res-box' style='background-color:#dc3545;'>Visitante: {p_f:.1f}%</div>", unsafe_allow_html=True)
 
             st.markdown("<br>", unsafe_allow_html=True)
             col1, col2, col3 = st.columns(3)
             
             with col1:
                 st.markdown("<div class='mercado-titulo'>⚽ GOLS</div>", unsafe_allow_html=True)
+                st.metric("Over 0.5 Gols", f"{calcular_poisson(m_gols, 0):.1f}%")
+                st.metric("Over 1.5 Gols", f"{calcular_poisson(m_gols, 1):.1f}%")
+                st.metric("Over 2.5 Gols", f"{calcular_poisson(m_gols, 2):.1f}%")
+            
+            with col2:
+                st.markdown("<div class='mercado-titulo'>🚩 ESCANTEIOS</div>", unsafe_allow_html=True)
+                st.metric("Over 4.5 Cantos", f"{calcular_poisson(m_cantos, 4):.1f}%")
+                st.metric("Over 7.5 Cantos", f"{calcular_poisson(m_cantos, 7):.1f}%")
+                st.metric("Over 9.5 Cantos", f"{calcular_poisson(m_cantos, 9):.1f}%")
+
+            with col3:
+                st.markdown("<div class='mercado-titulo'>🟨 CARTÕES</div>", unsafe_allow_html=True)
+                st.metric("Over 1.5 Cartões", f"{calcular_poisson(m_cartoes, 1):.1f}%")
+                st.metric("Over 3.5 Cartões", f"{calcular_poisson(m_cartoes, 3):.1f}%")
+                st.info(f"⚖️ Juiz: {jogo_foco.get('referee', {}).get('name', 'Pendente')}")
+    else:
+        st.info("💡 Selecione as ligas acima para carregar as partidas.")
+else:
+    st.warning("⚠️ Não foram encontrados eventos para esta data.")
