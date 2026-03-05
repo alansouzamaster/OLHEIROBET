@@ -48,7 +48,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("OLHEIRO PRO")
+st.title("⚽ OLHEIROBET PRO")
 
 # --- SIDEBAR ---
 st.sidebar.markdown("<h2 style='color: #ffc107;'>MENU</h2>", unsafe_allow_html=True)
