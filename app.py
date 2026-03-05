@@ -71,7 +71,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title(" ⚽ PROBET ANALISE ")
+st.title("  PROBET ANALISE ")
 st.markdown("---")
 
 # --- MENU CENTRALIZADO ---
@@ -174,3 +174,4 @@ if jogos:
         st.info("💡 Selecione uma liga acima para carregar as partidas.")
 else:
     st.warning(f"⚠️ Nenhum jogo disponível para {formatar_data_br(data_sel)}.")
+
