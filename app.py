@@ -33,7 +33,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("⚽ OlheiroBet PRO")
+st.title("⚽ OlheiroBet: Inteligência Esportiva")
 st.markdown("---")
 
 # --- 1. BUSCAR JOGOS DO DIA ---
