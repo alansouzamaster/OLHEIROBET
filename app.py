@@ -52,6 +52,9 @@ def formatar_hora(timestamp):
     if not timestamp: return "--:--"
     return datetime.fromtimestamp(timestamp).strftime('%H:%M')
 
+def formatar_data_br(data_obj):
+    return data_obj.strftime('%d/%m/%Y')
+
 # --- INTERFACE E CSS ---
 st.set_page_config(page_title="PROBET ANALISE", layout="wide", page_icon="⚽")
 
@@ -75,7 +78,8 @@ st.markdown("---")
 st.markdown("### 🛠️ FILTROS DE BUSCA")
 col_data, col_liga = st.columns([1, 2])
 with col_data:
-    data_sel = st.date_input("📅 Data das Partidas", value=datetime.now())
+    # Ajustado para exibir DD/MM/YYYY no seletor
+    data_sel = st.date_input("📅 Data das Partidas", value=datetime.now(), format="DD/MM/YYYY")
 
 @st.cache_data(ttl=3600)
 def carregar_jogos(data_str):
@@ -96,7 +100,7 @@ if jogos:
         ligas_sel = st.multiselect("🏆 Selecione as Ligas", todas_ligas)
 
     # --- JOGOS QUENTES (SCANNER) ---
-    st.subheader("🔥 Oportunidades em Destaque")
+    st.subheader(f"🔥 Destaques para {formatar_data_br(data_sel)}")
     quentes = [j for j in jogos if random.random() > 0.93][:4]
     
     if quentes:
@@ -108,7 +112,6 @@ if jogos:
                 nome_a = q['awayTeam'].get('shortName', q['awayTeam'].get('name'))
                 prob_simulada = random.randint(72, 89)
                 
-                # Correção do bloco HTML (Triple Quotes Fechadas Corretamente)
                 st.markdown(f"""
                 <div class='oportunidade-card'>
                     <span class='horario-badge'>🕒 {hora_q}</span><br>
@@ -135,7 +138,7 @@ if jogos:
 
             # --- EXIBIÇÃO DO CONFRONTO ---
             hora_f = formatar_hora(jogo.get('startTimestamp'))
-            st.markdown(f"<div style='text-align:center;'><span class='horario-badge'>INÍCIO ÀS {hora_f}</span></div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='text-align:center;'><span class='horario-badge'>INÍCIO ÀS {hora_f} - {formatar_data_br(data_sel)}</span></div>", unsafe_allow_html=True)
             
             c1, c_vs, c2 = st.columns([2, 1, 2])
             with c1: 
@@ -170,4 +173,4 @@ if jogos:
     else:
         st.info("💡 Selecione uma liga acima para carregar as partidas.")
 else:
-    st.warning("⚠️ Nenhum jogo disponível para esta data.")
+    st.warning(f"⚠️ Nenhum jogo disponível para {formatar_data_br(data_sel)}.")
