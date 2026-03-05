@@ -4,7 +4,6 @@ import math
 from datetime import datetime
 
 # --- CONFIGURAÇÃO DA SUA CHAVE ---
-# Verifique se esta chave e o Host estão corretos no seu RapidAPI
 API_KEY = "a19cf6b5fcmsh62790bdb0d293ddp131982jsn24158e88f703"
 HOST = "sportapi7.p.rapidapi.com"
 
@@ -13,7 +12,7 @@ HEADERS = {
     "X-RapidAPI-Host": HOST
 }
 
-# --- LÓGICA MATEMÁTICA (DISTRIBUIÇÃO DE POISSON) ---
+# --- LÓGICA MATEMÁTICA ---
 def calcular_poisson(media, alvo):
     if media <= 0: return 0
     prob_acumulada = 0
@@ -22,21 +21,18 @@ def calcular_poisson(media, alvo):
         prob_acumulada += prob_i
     return (1 - prob_acumulada) * 100
 
-# --- CONFIGURAÇÃO DA PÁGINA ---
+# --- INTERFACE ---
 st.set_page_config(page_title="OLHEIROBET PRO", layout="wide", page_icon="⚽")
 
-# Estilo CSS para melhorar o visual
+# Estilo para os cards
 st.markdown("""
     <style>
-    .main { background-color: #0e1117; }
     .stMetric { background-color: #161b22; padding: 15px; border-radius: 10px; border: 1px solid #30363d; }
     </style>
     """, unsafe_allow_html=True)
 
 st.title("⚽ OlheiroBet: Inteligência Esportiva")
-st.markdown("---")
 
-# --- 1. BUSCAR JOGOS DO DIA ---
 @st.cache_data(ttl=3600)
 def carregar_jogos():
     try:
@@ -51,68 +47,53 @@ def carregar_jogos():
 jogos = carregar_jogos()
 
 if jogos:
-    # --- 2. FILTROS LATERAIS ---
     st.sidebar.header("⚙️ Configurações")
     todas_ligas = sorted(list(set([j['tournament']['name'] for j in jogos])))
-    ligas_selecionadas = st.sidebar.multiselect("Filtrar por Liga:", todas_ligas, default=todas_ligas[:5])
+    ligas_sel = st.sidebar.multiselect("Filtrar por Liga:", todas_ligas, default=todas_ligas[:3])
 
-    # Filtrar jogos
-    jogos_filtrados = [j for j in jogos if j['tournament']['name'] in ligas_selecionadas]
+    jogos_filtrados = [j for j in jogos if j['tournament']['name'] in ligas_sel]
 
     if jogos_filtrados:
         lista_nomes = {f"{j['tournament']['name']} | {j['homeTeam']['name']} x {j['awayTeam']['name']}": j for j in jogos_filtrados}
-        escolha = st.selectbox("🎯 Selecione a Partida para Analisar:", list(lista_nomes.keys()))
-        
+        escolha = st.selectbox("🎯 Selecione a Partida:", list(lista_nomes.keys()))
         jogo_foco = lista_nomes[escolha]
         
-        # --- 3. CABEÇALHO DO CONFRONTO ---
-        st.write("### Análise de Confronto")
-        col_t1, col_vs, col_t2 = st.columns([2, 1, 2])
-        
-        with col_t1:
-            st.markdown(f"<h2 style='text-align: center; color: #1f77b4;'>{jogo_foco['homeTeam']['name']}</h2>", unsafe_allow_html=True)
-            st.caption(f"<p style='text-align: center;'>Mandante</p>", unsafe_allow_html=True)
-            
-        with col_vs:
-            st.markdown("<h1 style='text-align: center; color: #888;'>VS</h1>", unsafe_allow_html=True)
-            
-        with col_t2:
-            st.markdown(f"<h2 style='text-align: center; color: #ff4b4b;'>{jogo_foco['awayTeam']['name']}</h2>", unsafe_allow_html=True)
-            st.caption(f"<p style='text-align: center;'>Visitante</p>", unsafe_allow_html=True)
+        st.write("---")
+        c1, cv, c2 = st.columns([2, 1, 2])
+        c1.markdown(f"<h2 style='text-align: center;'>{jogo_foco['homeTeam']['name']}</h2>", unsafe_allow_html=True)
+        cv.markdown("<h2 style='text-align: center; color: gray;'>VS</h2>", unsafe_allow_html=True)
+        c2.markdown(f"<h2 style='text-align: center;'>{jogo_foco['awayTeam']['name']}</h2>", unsafe_allow_html=True)
 
-        # --- 4. BOTÃO DE EXECUÇÃO ---
         if st.button("🔍 EXECUTAR ANÁLISE COMPLETA"):
-            with st.spinner('Processando estatísticas e calculando probabilidades...'):
+            with st.spinner('Calculando probabilidades...'):
+                # Simulação de médias dinâmicas
+                m_gols = 2.85
+                m_cantos = 10.4
                 
-                # Médias dinâmicas (Ajustadas para o exemplo)
-                m_gols_esperada = 2.8
-                m_cantos_esperada = 10.4
-                
-                prob_gols = calcular_poisson(m_gols_esperada, 2)
-                prob_cantos = calcular_poisson(m_cantos_esperada, 9)
+                p_gols = calcular_poisson(m_gols, 2)
+                p_cantos = calcular_poisson(m_cantos, 9)
 
-                st.markdown("---")
-                st.subheader("📊 Resultados do Modelo Poisson")
-                
-                # Exibição em Colunas
-                c1, c2, c3 = st.columns(3)
+                st.markdown("### 📊 Resultado da Análise")
+                col_g, col_c, col_i = st.columns(3)
 
-                with c1:
-                    st.metric("Prob. Over 2.5 Gols", f"{prob_gols:.1f}%")
-                    st.progress(min(prob_gols/100, 1.0))
-                    if prob_gols > 65: st.success("🔥 Tendência Alta de Gols")
+                with col_g:
+                    st.metric("Prob. Over 2.5 Gols", f"{p_gols:.1f}%")
+                    st.progress(min(p_gols/100, 1.0))
+                    if p_gols > 65: st.success("🔥 Tendência de Gols")
 
-                with c2:
-                    st.metric("Prob. Over 9.5 Cantos", f"{prob_cantos:.1f}%")
-                    st.progress(min(prob_cantos/100, 1.0))
-                    if prob_cantos > 75: st.success("🚩 Tendência Alta de Cantos")
+                with col_c:
+                    st.metric("Prob. Over 9.5 Cantos", f"{p_cantos:.1f}%")
+                    st.progress(min(p_cantos/100, 1.0))
+                    if p_cantos > 75: st.success("🚩 Tendência de Cantos")
 
-                with c3:
-                    # Informações Adicionais
-                    juiz = jogo_foco.get('referee', {}).get('name', 'Não informado')
-                    st.write("**Extra:**")
+                with col_i:
+                    juiz = jogo_foco.get('referee', {}).get('name', 'Pendente')
+                    st.write("**Info Adicional:**")
                     st.info(f"⚖️ Árbitro: {juiz}")
-                    st.info(f"🏆 {jogo_foco['tournament']['name']}")
 
                 st.write("---")
-                st.caption("A
+                st.caption("Aviso: As probabilidades são baseadas em modelos matemáticos. Jogue com responsabilidade.")
+    else:
+        st.info("Selecione uma liga na barra lateral.")
+else:
+    st.error("Não foi possível carregar os jogos. Verifique sua chave API.")
