@@ -3,6 +3,7 @@ import requests
 import math
 import random
 from datetime import datetime
+import time
 
 # --- CONFIGURAÇÃO DA API ---
 API_KEY = "a19cf6b5fcmsh62790bdb0d293ddp131982jsn24158e88f703"
@@ -29,6 +30,10 @@ def prever_1x2(m_casa, m_fora):
         p_casa = p_fora = sobra / 2
     return p_casa, p_empate, p_fora
 
+def formatar_hora(timestamp):
+    # Converte o timestamp da API para o horário local
+    return datetime.fromtimestamp(timestamp).strftime('%H:%M')
+
 def exibir_forma(resultados):
     html = ""
     for r in resultados:
@@ -48,8 +53,7 @@ st.markdown("""
     .stButton>button { width: 100%; background-color: #ffc107 !important; color: black !important; font-weight: bold; border: none; padding: 12px; border-radius: 8px; font-size: 16px; }
     .mercado-titulo { color: #ffc107; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #333; }
     .res-box { text-align: center; padding: 10px; border-radius: 6px; font-weight: bold; color: white; }
-    /* Centralizando widgets */
-    .stMultiSelect, .stDateInput, .stSelectbox { background-color: #1c2128; border-radius: 8px; }
+    .horario-badge { background-color: #333; color: #ffc107; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 14px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -76,30 +80,43 @@ jogos = carregar_jogos(data_sel.strftime('%Y-%m-%d'))
 if jogos:
     with col_liga:
         todas_ligas = sorted(list(set([j['tournament']['name'] for j in jogos])))
-        ligas_sel = st.multiselect("🏆 Selecione as Ligas (Ex: Brazil)", todas_ligas)
+        ligas_sel = st.multiselect("🏆 Selecione as Ligas", todas_ligas)
 
-    # --- JOGOS QUENTES (Abaixo dos filtros) ---
+    # --- JOGOS QUENTES COM HORÁRIO ---
     st.subheader("🔥 Oportunidades em Destaque")
-    quentes = [j for j in jogos if random.random() > 0.90][:4]
+    quentes = [j for j in jogos if random.random() > 0.92][:4]
     if quentes:
         cols_q = st.columns(len(quentes))
         for i, q in enumerate(quentes):
             with cols_q[i]:
                 prob_q = random.randint(71, 88)
-                st.markdown(f"<div class='oportunidade-card'><small>{q['tournament']['name']}</small><br><strong>{q['homeTeam']['name']} x {q['awayTeam']['name']}</strong><br><span style='color:#ffc107;'>Over 2.5: {prob_q}%</span></div>", unsafe_allow_html=True)
+                hora = formatar_hora(q.get('startTimestamp', time.time()))
+                st.markdown(f"""
+                <div class='oportunidade-card'>
+                    <span class='horario-badge'>🕒 {hora}</span><br>
+                    <small>{q['tournament']['name']}</small><br>
+                    <strong>{q['homeTeam']['name']} x {q['awayTeam']['name']}</strong><br>
+                    <span style='color:#ffc107;'>Over 2.5: {prob_q}%</span>
+                </div>
+                """, unsafe_allow_html=True)
 
     st.write("---")
 
-    # --- SELEÇÃO DE JOGO (CENTRO) ---
+    # --- SELEÇÃO DE JOGO COM HORÁRIO NO NOME ---
     jogos_filtrados = [j for j in jogos if j['tournament']['name'] in ligas_sel]
 
     if jogos_filtrados:
-        lista_nomes = {f"{j['tournament']['name']} | {j['homeTeam']['name']} x {j['awayTeam']['name']}": j for j in jogos_filtrados}
+        # Adicionando o horário na lista de seleção para facilitar a identificação
+        lista_nomes = {
+            f"[{formatar_hora(j.get('startTimestamp'))}] {j['homeTeam']['name']} x {j['awayTeam']['name']}": j 
+            for j in jogos_filtrados
+        }
         escolha = st.selectbox("🎯 Escolha uma partida para analisar:", list(lista_nomes.keys()))
         jogo_foco = lista_nomes[escolha]
+        hora_foco = formatar_hora(jogo_foco.get('startTimestamp'))
         
         # --- CABEÇALHO CONFRONTO ---
-        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align:center;'><span class='horario-badge' style='font-size:18px;'>INÍCIO ÀS {hora_foco}</span></div>", unsafe_allow_html=True)
         c_h, c_v, c_a = st.columns([2, 1, 2])
         with c_h:
             st.markdown(f"<h2 style='text-align: center;'>{jogo_foco['homeTeam']['name']}</h2>", unsafe_allow_html=True)
@@ -116,7 +133,6 @@ if jogos:
             m_gols = m_casa + m_fora
             m_cantos, m_cartoes = 10.5, 4.2
             
-            # Resultado 1X2
             p_c, p_e, p_f = prever_1x2(m_casa, m_fora)
             st.markdown("### 📊 Probabilidades 1X2")
             r1, r2, r3 = st.columns(3)
@@ -129,22 +145,3 @@ if jogos:
             
             with col1:
                 st.markdown("<div class='mercado-titulo'>⚽ GOLS</div>", unsafe_allow_html=True)
-                st.metric("Over 0.5 Gols", f"{calcular_poisson(m_gols, 0):.1f}%")
-                st.metric("Over 1.5 Gols", f"{calcular_poisson(m_gols, 1):.1f}%")
-                st.metric("Over 2.5 Gols", f"{calcular_poisson(m_gols, 2):.1f}%")
-            
-            with col2:
-                st.markdown("<div class='mercado-titulo'>🚩 ESCANTEIOS</div>", unsafe_allow_html=True)
-                st.metric("Over 4.5 Cantos", f"{calcular_poisson(m_cantos, 4):.1f}%")
-                st.metric("Over 7.5 Cantos", f"{calcular_poisson(m_cantos, 7):.1f}%")
-                st.metric("Over 9.5 Cantos", f"{calcular_poisson(m_cantos, 9):.1f}%")
-
-            with col3:
-                st.markdown("<div class='mercado-titulo'>🟨 CARTÕES</div>", unsafe_allow_html=True)
-                st.metric("Over 1.5 Cartões", f"{calcular_poisson(m_cartoes, 1):.1f}%")
-                st.metric("Over 3.5 Cartões", f"{calcular_poisson(m_cartoes, 3):.1f}%")
-                st.info(f"⚖️ Juiz: {jogo_foco.get('referee', {}).get('name', 'Pendente')}")
-    else:
-        st.info("💡 Escolha a data e selecione as ligas acima para carregar as partidas.")
-else:
-    st.warning("⚠️ Não foram encontrados eventos para esta data.")
