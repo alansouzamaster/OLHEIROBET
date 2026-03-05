@@ -15,7 +15,6 @@ def calcular_poisson(media, alvo):
     if media <= 0: return 0
     prob_acumulada = 0
     for i in range(int(alvo) + 1):
-        # math.factorial pode travar com números muito altos; aqui é seguro para futebol
         prob_i = (math.exp(-media) * (media**i)) / math.factorial(i)
         prob_acumulada += prob_i
     return (1 - prob_acumulada) * 100
@@ -35,10 +34,9 @@ def prever_1x2(m_casa, m_fora):
 def buscar_medias_reais(tournament_id, season_id, home_id, away_id):
     try:
         url = f"https://{HOST}/api/v1/tournament/{tournament_id}/season/{season_id}/standings/total"
-        response = requests.get(url, headers=HEADERS, timeout=10) # Adicionado timeout
+        response = requests.get(url, headers=HEADERS, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            # Verificação de segurança para evitar erro de 'NoneType' ou lista vazia
             standings_list = data.get('standings', [])
             if not standings_list: return 1.5, 1.0
             
@@ -47,11 +45,11 @@ def buscar_medias_reais(tournament_id, season_id, home_id, away_id):
             for row in rows:
                 t_id = row['team']['id']
                 jogos = row.get('matches', 1)
-                if jogos == 0: jogos = 1 # Evita divisão por zero
+                if jogos == 0: jogos = 1
                 if t_id == home_id: m_casa = row.get('scoresFor', 0)/jogos
                 if t_id == away_id: m_fora = row.get('scoresFor', 0)/jogos
             return round(m_casa, 2), round(m_fora, 2)
-    except Exception as e:
+    except Exception:
         return 1.5, 1.0
     return 1.5, 1.0
 
@@ -91,4 +89,30 @@ with container_filtros:
 @st.cache_data(ttl=3600)
 def carregar_jogos(data_str):
     try:
-        url = f
+        # CORREÇÃO DA URL AQUI:
+        url = f"https://{HOST}/api/v1/sport/football/scheduled-events/{data_str}"
+        response = requests.get(url, headers=HEADERS, timeout=10)
+        if response.status_code == 200:
+            return response.json().get('events', [])
+        return []
+    except Exception:
+        return []
+
+jogos = carregar_jogos(data_sel.strftime('%Y-%m-%d'))
+
+# Inicialização da variável para evitar erro de referência
+btn_analise = False
+
+if jogos:
+    todas_ligas = sorted(list(set([j['tournament']['name'] for j in jogos])))
+    
+    with container_filtros:
+        ligas_sel = st.multiselect("🏆 2. Selecione as Ligas", todas_ligas)
+        
+        jogos_f = [j for j in jogos if j['tournament']['name'] in ligas_sel] if ligas_sel else jogos
+        
+        if jogos_f:
+            lista_nomes = {f"[{formatar_hora(j.get('startTimestamp'))}] {j['homeTeam']['name']} x {j['awayTeam']['name']}": j for j in jogos_f}
+            escolha = st.selectbox("🎯 3. Escolha uma partida para analisar:", list(lista_nomes.keys()))
+            jogo_selecionado = lista_nomes[escolha]
+            btn_analise = st.button("🔍 GERAR RELATÓRIO
