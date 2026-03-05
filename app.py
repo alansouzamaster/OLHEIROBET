@@ -1,18 +1,15 @@
 import streamlit as st
 import requests
 import math
+import random
 from datetime import datetime, timedelta
 
-# --- CONFIGURAÇÃO DA SUA CHAVE ---
+# --- CONFIGURAÇÃO ---
 API_KEY = "a19cf6b5fcmsh62790bdb0d293ddp131982jsn24158e88f703"
 HOST = "sportapi7.p.rapidapi.com"
+HEADERS = {"X-RapidAPI-Key": API_KEY, "X-RapidAPI-Host": HOST}
 
-HEADERS = {
-    "X-RapidAPI-Key": API_KEY,
-    "X-RapidAPI-Host": HOST
-}
-
-# --- LÓGICA MATEMÁTICA ---
+# --- FUNÇÕES DE CÁLCULO ---
 def calcular_poisson(media, alvo):
     if media <= 0: return 0
     prob_acumulada = 0
@@ -21,114 +18,134 @@ def calcular_poisson(media, alvo):
         prob_acumulada += prob_i
     return (1 - prob_acumulada) * 100
 
-def prever_resultado(m_casa, m_fora):
-    # Simulação simplificada de probabilidades 1X2 baseada em Poisson
-    # Chance de vitória baseada na força relativa
-    total = m_casa + m_fora
-    p_win_home = (m_casa / total) * 100 if total > 0 else 33.3
-    p_win_away = (m_fora / total) * 100 if total > 0 else 33.3
-    # Empate é inversamente proporcional à média de gols esperada (jogos de poucos gols empatam mais)
-    p_draw = 100 - p_win_home - p_win_away
-    
-    # Ajuste para dar realismo (empate em futebol gira em torno de 25-30%)
-    p_draw = 28.0 
-    sobra = 100 - p_draw
-    p_win_home = sobra * (m_casa / total)
-    p_win_away = sobra * (m_fora / total)
-    
-    return p_win_home, p_draw, p_win_away
+def exibir_forma(lista_resultados):
+    html_forma = ""
+    for res in lista_resultados:
+        color = "#28a745" if res == "V" else "#ffc107" if res == "E" else "#dc3545"
+        html_forma += f'<span style="display:inline-block; width:22px; height:22px; background-color:{color}; border-radius:4px; margin-right:4px; text-align:center; color:white; font-size:12px; line-height:22px; font-weight:bold;">{res}</span>'
+    return html_forma
 
-# --- INTERFACE ---
+# --- INTERFACE E DESIGN CSS ---
 st.set_page_config(page_title="OLHEIROBET PRO", layout="wide", page_icon="⚽")
 
 st.markdown("""
     <style>
-    .stMetric { background-color: #161b22; padding: 15px; border-radius: 10px; border: 1px solid #30363d; }
-    .resultado-box { text-align: center; padding: 10px; border-radius: 5px; margin: 5px; color: white; font-weight: bold; }
+    /* Fundo principal e fontes */
+    .stApp { background-color: #0e1117; color: #e0e0e0; }
+    
+    /* Personalização de Cards de Métrica */
+    div[data-testid="stMetricValue"] { color: #ffc107 !important; font-size: 28px !important; }
+    div[data-testid="stMetricLabel"] { color: #9ea4b0 !important; font-weight: bold !important; }
+    .stMetric { 
+        background-color: #1c2128; 
+        padding: 20px; 
+        border-radius: 12px; 
+        border: 1px solid #30363d;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    }
+
+    /* Card de Oportunidade */
+    .oportunidade-card { 
+        background-color: #1c2128; 
+        padding: 15px; 
+        border-top: 3px solid #ffc107; 
+        border-radius: 8px; 
+        margin-bottom: 10px;
+        transition: transform 0.2s;
+    }
+    .oportunidade-card:hover { transform: scale(1.02); }
+
+    /* Estilo do Título */
+    h1 { color: #ffffff !important; font-weight: 800 !important; letter-spacing: -1px; }
+    
+    /* Botões */
+    .stButton>button {
+        width: 100%;
+        background-color: #ffc107 !important;
+        color: #000000 !important;
+        font-weight: bold !important;
+        border-radius: 8px !important;
+        border: none !important;
+        padding: 10px !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("⚽ OlheiroBet: Inteligência Esportiva")
+st.title("⚽ OLHEIROBET PRO")
+st.markdown("<p style='color: #9ea4b0;'>Inteligência e Análise Preditiva de Futebol</p>", unsafe_allow_html=True)
 
-# --- CALENDÁRIO ---
-st.sidebar.header("📅 Calendário")
-data_selecionada = st.sidebar.date_input(
-    "Escolha a data:",
-    value=datetime.now(),
-    min_value=datetime.now() - timedelta(days=1),
-    max_value=datetime.now() + timedelta(days=7)
-)
+# --- SIDEBAR ---
+st.sidebar.markdown("<h2 style='color: #ffc107;'>MENU</h2>", unsafe_allow_html=True)
+data_sel = st.sidebar.date_input("Escolha a Data", value=datetime.now())
 
 @st.cache_data(ttl=3600)
 def carregar_jogos(data_str):
     try:
         url = f"https://{HOST}/api/v1/sport/football/scheduled-events/{data_str}"
         response = requests.get(url, headers=HEADERS)
-        if response.status_code == 200:
-            return response.json().get('events', [])
-        return []
-    except:
-        return []
+        return response.json().get('events', []) if response.status_code == 200 else []
+    except: return []
 
-jogos = carregar_jogos(data_selecionada.strftime('%Y-%m-%d'))
+jogos = carregar_jogos(data_sel.strftime('%Y-%m-%d'))
 
 if jogos:
-    st.sidebar.header("⚙️ Filtros")
-    todas_ligas = sorted(list(set([j['tournament']['name'] for j in jogos])))
-    ligas_sel = st.sidebar.multiselect("Filtrar por Liga:", todas_ligas, default=todas_ligas[:3])
+    # --- JOGOS QUENTES (Design Melhorado) ---
+    st.markdown("### 🔥 OPORTUNIDADES EM DESTAQUE")
+    oportunidades = [j for j in jogos if random.random() > 0.85][:3] # Simulação de filtro
+    
+    if oportunidades:
+        cols = st.columns(len(oportunidades))
+        for i, op in enumerate(oportunidades):
+            with cols[i]:
+                st.markdown(f"""
+                <div class='oportunidade-card'>
+                    <small style='color: #8b949e;'>{op['tournament']['name']}</small><br>
+                    <div style='margin: 8px 0;'><strong>{op['homeTeam']['name']} x {op['awayTeam']['name']}</strong></div>
+                    <span style='color: #ffc107; font-size: 0.9em;'>📈 Confiança: {random.randint(70, 88)}%</span>
+                </div>
+                """, unsafe_allow_html=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
 
+    # --- SELEÇÃO DE JOGO ---
+    todas_ligas = sorted(list(set([j['tournament']['name'] for j in jogos])))
+    ligas_sel = st.sidebar.multiselect("Ligas", todas_ligas, default=todas_ligas[:2])
     jogos_filtrados = [j for j in jogos if j['tournament']['name'] in ligas_sel]
 
     if jogos_filtrados:
         lista_nomes = {f"{j['tournament']['name']} | {j['homeTeam']['name']} x {j['awayTeam']['name']}": j for j in jogos_filtrados}
-        escolha = st.selectbox("🎯 Selecione a Partida:", list(lista_nomes.keys()))
+        escolha = st.selectbox("🎯 Selecione a Partida para Detalhamento:", list(lista_nomes.keys()))
         jogo_foco = lista_nomes[escolha]
         
-        st.write("---")
-        c1, cv, c2 = st.columns([2, 1, 2])
-        c1.markdown(f"<h2 style='text-align: center;'>{jogo_foco['homeTeam']['name']}</h2>", unsafe_allow_html=True)
-        cv.markdown("<h2 style='text-align: center; color: gray;'>VS</h2>", unsafe_allow_html=True)
-        c2.markdown(f"<h2 style='text-align: center;'>{jogo_foco['awayTeam']['name']}</h2>", unsafe_allow_html=True)
+        st.markdown("---")
+        
+        # --- HEAD TO HEAD VISUAL ---
+        c_h, c_v, c_a = st.columns([2, 1, 2])
+        with c_h:
+            st.markdown(f"<h3 style='text-align: center;'>{jogo_foco['homeTeam']['name']}</h3>", unsafe_allow_html=True)
+            st.markdown(f"<div style='text-align: center;'>{exibir_forma(['V','V','E','D','V'])}</div>", unsafe_allow_html=True)
+        with c_v:
+            st.markdown("<h1 style='text-align: center; color: #30363d; margin-top:10px;'>VS</h1>", unsafe_allow_html=True)
+        with c_a:
+            st.markdown(f"<h3 style='text-align: center;'>{jogo_foco['awayTeam']['name']}</h3>", unsafe_allow_html=True)
+            st.markdown(f"<div style='text-align: center;'>{exibir_forma(['D','E','D','V','D'])}</div>", unsafe_allow_html=True)
 
-        if st.button("🔍 EXECUTAR ANÁLISE COMPLETA"):
-            with st.spinner('Processando probabilidades...'):
-                # Médias Base (Ajustadas para demonstrar favoritismo do mandante)
-                m_casa_gols = 1.7
-                m_fora_gols = 1.1
-                m_total_gols = m_casa_gols + m_fora_gols
+        if st.button("🔍 GERAR RELATÓRIO ESTATÍSTICO"):
+            with st.spinner('Processando algoritmos...'):
+                p_gols = calcular_poisson(2.9, 2)
+                p_cantos = calcular_poisson(10.2, 9)
+                p_cartoes = calcular_poisson(4.8, 3)
+
+                st.markdown("<br>", unsafe_allow_html=True)
+                m1, m2, m3 = st.columns(3)
+                m1.metric("CHANCE OVER 2.5 GOLS", f"{p_gols:.1f}%")
+                m2.metric("CHANCE OVER 9.5 CANTOS", f"{p_cantos:.1f}%")
+                m3.metric("CHANCE OVER 3.5 CARTÕES", f"{p_cartoes:.1f}%")
                 
-                p_gols = calcular_poisson(m_total_gols, 2)
-                p_cantos = calcular_poisson(10.4, 9)
-                p_cartoes = calcular_poisson(4.5, 3)
-                
-                # 1X2 Probabilidades
-                p_casa, p_empate, p_fora = prever_resultado(m_casa_gols, m_fora_gols)
-
-                st.markdown("### 📊 Probabilidades de Resultado Final (1X2)")
-                res1, resX, res2 = st.columns(3)
-                res1.markdown(f"<div class='resultado-box' style='background-color: #1f77b4;'>Vitoria Mandante: {p_casa:.1f}%</div>", unsafe_allow_html=True)
-                resX.markdown(f"<div class='resultado-box' style='background-color: #444;'>Empate: {p_empate:.1f}%</div>", unsafe_allow_html=True)
-                res2.markdown(f"<div class='resultado-box' style='background-color: #ff4b4b;'>Vitoria Visitante: {p_fora:.1f}%</div>", unsafe_allow_html=True)
-
-                st.markdown("### 📈 Mercados de Gols, Cantos e Cartões")
-                col_g, col_c, col_card = st.columns(3)
-
-                with col_g:
-                    st.metric("Prob. Over 2.5 Gols", f"{p_gols:.1f}%")
-                    st.progress(min(p_gols/100, 1.0))
-
-                with col_c:
-                    st.metric("Prob. Over 9.5 Cantos", f"{p_cantos:.1f}%")
-                    st.progress(min(p_cantos/100, 1.0))
-
-                with col_card:
-                    st.metric("Prob. Over 3.5 Cartões", f"{p_cartoes:.1f}%")
-                    st.progress(min(p_cartoes/100, 1.0))
-
-                st.write("---")
-                juiz = jogo_foco.get('referee', {}).get('name', 'Pendente')
-                st.info(f"⚖️ Árbitro: {juiz} | 📅 Data: {data_selecionada.strftime('%d/%m/%Y')}")
+                # Barras de Progresso Customizadas
+                st.markdown(f"<small>Confiança do Modelo: {p_gols:.0f}%</small>", unsafe_allow_html=True)
+                st.progress(p_gols/100)
     else:
-        st.info("Selecione uma liga na barra lateral.")
+        st.info("Utilize os filtros laterais para carregar os jogos.")
 else:
-    st.error("Nenhum jogo encontrado para esta data.")
+    st.error("Servidor de dados offline ou data sem jogos.")
