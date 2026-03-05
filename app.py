@@ -41,7 +41,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("⚽ OLHEIROBET PRO")
+st.title(" PROBET ANALISE ")
 
 # --- SIDEBAR ---
 st.sidebar.markdown("<h2 style='color: #ffc107;'>MENU</h2>", unsafe_allow_html=True)
@@ -121,3 +121,4 @@ if jogos:
         st.info("👈 Selecione uma liga brasileira ou internacional na barra lateral.")
 else:
     st.error("Sem jogos disponíveis para esta data.")
+
