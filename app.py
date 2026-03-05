@@ -15,7 +15,6 @@ def calcular_poisson(media, alvo):
     if media <= 0: return 0
     prob_acumulada = 0
     for i in range(int(alvo) + 1):
-        # Cálculo de probabilidade usando a distribuição de Poisson
         prob_i = (math.exp(-media) * (media**i)) / math.factorial(i)
         prob_acumulada += prob_i
     return (1 - prob_acumulada) * 100
@@ -80,7 +79,7 @@ st.markdown("""
 st.title(" ⚽ PROBET ANALISE ")
 st.markdown("---")
 
-# --- FILTROS DE BUSCA (ESTRUTURA VERTICAL) ---
+# --- FILTROS DE BUSCA ---
 st.markdown("### 🛠️ CONFIGURAÇÃO DA ANÁLISE")
 container_filtros = st.container()
 
@@ -99,32 +98,23 @@ def carregar_jogos(data_str):
         return []
 
 jogos = carregar_jogos(data_sel.strftime('%Y-%m-%d'))
-
-# Inicialização segura para evitar erro de referência
 btn_analise = False
 
 if jogos:
     todas_ligas = sorted(list(set([j['tournament']['name'] for j in jogos])))
     
     with container_filtros:
-        # Seleção de Ligas abaixo da data
         ligas_sel = st.multiselect("🏆 2. Selecione as Ligas", todas_ligas)
-        
-        # Filtra os jogos com base na liga selecionada
         jogos_f = [j for j in jogos if j['tournament']['name'] in ligas_sel] if ligas_sel else jogos
         
         if jogos_f:
-            # Seleção de Partida abaixo das ligas
             lista_nomes = {f"[{formatar_hora(j.get('startTimestamp'))}] {j['homeTeam']['name']} x {j['awayTeam']['name']}": j for j in jogos_f}
             escolha = st.selectbox("🎯 3. Escolha uma partida para analisar:", list(lista_nomes.keys()))
             jogo_selecionado = lista_nomes[escolha]
-            
-            # Botão de ação (corrigido aqui)
             btn_analise = st.button("🔍 GERAR RELATÓRIO PREDITIVO COMPLETO")
         else:
             st.info("💡 Nenhuma partida encontrada para os critérios selecionados.")
 
-    # --- EXIBIÇÃO DE DESTAQUES (APARECE SE NÃO HOUVER ANÁLISE ATIVA) ---
     if not btn_analise:
         st.write("---")
         st.subheader(f"🔥 Destaques para {formatar_data_br(data_sel)}")
@@ -147,10 +137,9 @@ if jogos:
                     </div>
                     """, unsafe_allow_html=True)
 
-    # --- RESULTADO DA ANÁLISE ---
     if btn_analise:
         st.write("---")
-        with st.spinner('Acessando dados históricos e calculando probabilidades...'):
+        with st.spinner('Acessando dados históricos...'):
             m_h, m_a = buscar_medias_reais(
                 jogo_selecionado['tournament']['id'], 
                 jogo_selecionado['season']['id'], 
@@ -160,7 +149,6 @@ if jogos:
             m_total = m_h + m_a
             p_c, p_e, p_f = prever_1x2(m_h, m_a)
 
-        # Cabeçalho do Confronto
         hora_f = formatar_hora(jogo_selecionado.get('startTimestamp'))
         st.markdown(f"<div style='text-align:center;'><span class='horario-badge'>INÍCIO ÀS {hora_f} - {formatar_data_br(data_sel)}</span></div>", unsafe_allow_html=True)
         
