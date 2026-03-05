@@ -37,7 +37,6 @@ def carregar_jogos():
 jogos = carregar_jogos()
 
 if jogos:
-    if jogos:
     # --- 1. FILTRO LATERAL DE LIGAS ---
     st.sidebar.header("Filtros")
     todas_ligas = sorted(list(set([j['tournament']['name'] for j in jogos])))
@@ -128,6 +127,7 @@ else:
         st.success(f"Análise concluída para: {escolha}")
 else:
     st.warning("Aguardando jogos serem carregados ou nenhum jogo hoje.")
+
 
 
 
