@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 import math
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # --- CONFIGURAÇÃO DA SUA CHAVE ---
 API_KEY = "a19cf6b5fcmsh62790bdb0d293ddp131982jsn24158e88f703"
@@ -32,10 +32,20 @@ st.markdown("""
 
 st.title("⚽ OlheiroBet: Inteligência Esportiva")
 
+# --- 1. SELETOR DE DATA NA BARRA LATERAL ---
+st.sidebar.header("📅 Calendário")
+# Define o intervalo de busca (de hoje até 7 dias no futuro)
+data_selecionada = st.sidebar.date_input(
+    "Escolha a data dos jogos:",
+    value=datetime.now(),
+    min_value=datetime.now() - timedelta(days=1),
+    max_value=datetime.now() + timedelta(days=7)
+)
+
 @st.cache_data(ttl=3600)
-def carregar_jogos():
+def carregar_jogos(data_str):
     try:
-        url = f"https://{HOST}/api/v1/sport/football/scheduled-events/{datetime.now().strftime('%Y-%m-%d')}"
+        url = f"https://{HOST}/api/v1/sport/football/scheduled-events/{data_str}"
         response = requests.get(url, headers=HEADERS)
         if response.status_code == 200:
             return response.json().get('events', [])
@@ -43,10 +53,11 @@ def carregar_jogos():
     except:
         return []
 
-jogos = carregar_jogos()
+# Carrega os jogos com base na data escolhida pelo usuário
+jogos = carregar_jogos(data_selecionada.strftime('%Y-%m-%d'))
 
 if jogos:
-    st.sidebar.header("⚙️ Configurações")
+    st.sidebar.header("⚙️ Filtros")
     todas_ligas = sorted(list(set([j['tournament']['name'] for j in jogos])))
     ligas_sel = st.sidebar.multiselect("Filtrar por Liga:", todas_ligas, default=todas_ligas[:3])
 
@@ -57,24 +68,25 @@ if jogos:
         escolha = st.selectbox("🎯 Selecione a Partida:", list(lista_nomes.keys()))
         jogo_foco = lista_nomes[escolha]
         
+        st.write(f"#### Analisando jogos para o dia: {data_selecionada.strftime('%d/%m/%Y')}")
         st.write("---")
+        
         c1, cv, c2 = st.columns([2, 1, 2])
         c1.markdown(f"<h2 style='text-align: center;'>{jogo_foco['homeTeam']['name']}</h2>", unsafe_allow_html=True)
         cv.markdown("<h2 style='text-align: center; color: gray;'>VS</h2>", unsafe_allow_html=True)
         c2.markdown(f"<h2 style='text-align: center;'>{jogo_foco['awayTeam']['name']}</h2>", unsafe_allow_html=True)
 
         if st.button("🔍 EXECUTAR ANÁLISE COMPLETA"):
-            with st.spinner('Analisando Gols, Cantos e Cartões...'):
-                # Médias Estimadas (Podem ser ajustadas conforme a liga)
+            with st.spinner('Analisando probabilidades...'):
                 m_gols = 2.85
                 m_cantos = 10.4
-                m_cartoes = 4.5  # Média de cartões por jogo
+                m_cartoes = 4.5
                 
                 p_gols = calcular_poisson(m_gols, 2)
                 p_cantos = calcular_poisson(m_cantos, 9)
-                p_cartoes = calcular_poisson(m_cartoes, 3) # Probabilidade de Over 3.5 Cartões
+                p_cartoes = calcular_poisson(m_cartoes, 3)
 
-                st.markdown("### 📊 Resultado da Análise Profissional")
+                st.markdown("### 📊 Resultado da Análise")
                 col_g, col_c, col_card = st.columns(3)
 
                 with col_g:
@@ -94,9 +106,8 @@ if jogos:
 
                 st.write("---")
                 juiz = jogo_foco.get('referee', {}).get('name', 'Pendente')
-                st.info(f"⚖️ **Análise do Árbitro:** {juiz}. O modelo Poisson indica uma confiança de {p_cartoes:.1f}% para mais de 3.5 cartões nesta partida.")
-                st.caption("Aviso: Dados estatísticos baseados em médias históricas. Jogue com responsabilidade.")
+                st.info(f"⚖️ **Árbitro:** {juiz} | 📅 **Data:** {data_selecionada.strftime('%d/%m/%Y')}")
     else:
-        st.info("Selecione uma liga na barra lateral.")
+        st.info("Selecione uma liga na barra lateral para ver os jogos da data escolhida.")
 else:
-    st.error("Não foi possível carregar os jogos. Verifique sua chave API.")
+    st.error(f"Não foram encontrados jogos para o dia {data_selecionada.strftime('%d/%m/%Y')}. Tente outra data.")
