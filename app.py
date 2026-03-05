@@ -88,4 +88,5 @@ if jogos:
             st.markdown(f"<h3 style='text-align: center;'>{jogo_foco['homeTeam']['name']}</h3>", unsafe_allow_html=True)
             st.markdown(f"<div style='text-align: center;'>{exibir_forma(['V','V','E','D','V'])}</div>", unsafe_allow_html=True)
         with c_v:
-            st.markdown("<h1 style='text-align: center
+            st.markdown("<h1 style='text-align: center")
+
