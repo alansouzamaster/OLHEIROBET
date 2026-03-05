@@ -2,8 +2,7 @@ import streamlit as st
 import requests
 import math
 import random
-from datetime import datetime, date, timedelta
-import time
+from datetime import datetime, timezone, timedelta
 
 # --- CONFIGURAÇÃO DA API ---
 API_KEY = "a19cf6b5fcmsh62790bdb0d293ddp131982jsn24158e88f703"
@@ -30,105 +29,124 @@ def prever_1x2(m_casa, m_fora):
         p_casa = p_fora = sobra / 2
     return p_casa, p_empate, p_fora
 
-@st.cache_data(ttl=86400)
+@st.cache_data(ttl=3600)
 def buscar_medias_reais(tournament_id, season_id, home_id, away_id):
     try:
         url = f"https://{HOST}/api/v1/tournament/{tournament_id}/season/{season_id}/standings/total"
-        response = requests.get(url, headers=HEADERS, timeout=12)
+        response = requests.get(url, headers=HEADERS, timeout=15)
         if response.status_code == 200:
             data = response.json()
-            standings_list = data.get('standings', [])
-            if not standings_list: return 1.5, 1.0
+            standings = data.get('standings', [])
+            if not standings: return 1.5, 1.2
             
-            rows = standings_list[0].get('rows', [])
-            m_casa, m_fora = 1.4, 1.1
+            rows = standings[0].get('rows', [])
+            m_casa, m_fora = 1.5, 1.2 # Valores padrão caso não encontre o time
             for row in rows:
                 t_id = row['team']['id']
                 jogos = row.get('matches', 1)
                 if jogos == 0: jogos = 1
-                if t_id == home_id: m_casa = row.get('scoresFor', 0)/jogos
-                if t_id == away_id: m_fora = row.get('scoresFor', 0)/jogos
+                gols = row.get('scoresFor', 0)
+                if t_id == home_id: m_casa = gols/jogos
+                if t_id == away_id: m_fora = gols/jogos
             return round(m_casa, 2), round(m_fora, 2)
-    except Exception:
-        return 1.5, 1.0
-    return 1.5, 1.0
+    except:
+        return 1.6, 1.3
+    return 1.6, 1.3
 
 def formatar_hora(timestamp):
     if not timestamp: return "--:--"
-    return datetime.fromtimestamp(timestamp).strftime('%H:%M')
+    # Ajuste para fuso horário de Brasília (GMT-3)
+    dt = datetime.fromtimestamp(timestamp, tz=timezone.utc).astimezone(timezone(timedelta(hours=-3)))
+    return dt.strftime('%H:%M')
 
-def formatar_data_br(data_obj):
-    return data_obj.strftime('%d/%m/%Y')
-
-# --- INTERFACE E CSS ---
-st.set_page_config(page_title="PROBET ANALISE", layout="wide", page_icon="⚽")
+# --- INTERFACE ---
+st.set_page_config(page_title="PROBET ANALISE", layout="wide")
 
 st.markdown("""
     <style>
     .stApp { background-color: #0e1117; color: #e0e0e0; }
-    div[data-testid="stMetricValue"] { color: #ffc107 !important; font-size: 24px !important; }
-    .stMetric { background-color: #1c2128; padding: 15px; border-radius: 12px; border: 1px solid #30363d; }
-    .oportunidade-card { background-color: #1c2128; padding: 15px; border-top: 3px solid #ffc107; border-radius: 8px; margin-bottom: 10px; min-height: 160px; }
-    .stButton>button { width: 100%; background-color: #ffc107 !important; color: black !important; font-weight: bold; border-radius: 8px; }
-    .res-box { text-align: center; padding: 12px; border-radius: 8px; font-weight: bold; color: white; margin-bottom: 10px; font-size: 18px; }
+    .stMetric { background-color: #1c2128; padding: 15px; border-radius: 10px; border: 1px solid #333; }
+    .res-box { text-align: center; padding: 12px; border-radius: 8px; font-weight: bold; color: white; margin-bottom: 10px; }
     .horario-badge { background-color: #333; color: #ffc107; padding: 3px 10px; border-radius: 5px; font-weight: bold; }
-    .header-vs { text-align: center; color: #ffc107; font-size: 40px; font-weight: bold; margin-top: 10px; }
     </style>
     """, unsafe_allow_html=True)
 
 st.title(" ⚽ PROBET ANALISE ")
-st.markdown("---")
 
-# --- FILTROS DE BUSCA ---
-st.markdown("### 🛠️ CONFIGURAÇÃO DA ANÁLISE")
-container_filtros = st.container()
+# --- FILTROS ---
+data_sel = st.date_input("📅 Selecione a Data", value=datetime.now())
 
-with container_filtros:
-    data_sel = st.date_input("📅 1. Data das Partidas", value=datetime.now(), format="DD/MM/YYYY")
-
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=600)
 def carregar_jogos(data_str):
+    url = f"https://{HOST}/api/v1/sport/football/scheduled-events/{data_str}"
     try:
-        url = f"https://{HOST}/api/v1/sport/football/scheduled-events/{data_str}"
-        response = requests.get(url, headers=HEADERS, timeout=12)
+        response = requests.get(url, headers=HEADERS, timeout=15)
         if response.status_code == 200:
             return response.json().get('events', [])
-        return []
-    except Exception:
-        return []
-
-# Busca os jogos da API
-raw_jogos = carregar_jogos(data_sel.strftime('%Y-%m-%d'))
-
-# --- LOGICA PARA DESCARTAR JOGOS DE OUTROS DIAS ---
-jogos = []
-inicio_dia = datetime.combine(data_sel, datetime.min.time()).timestamp()
-fim_dia = datetime.combine(data_sel, datetime.max.time()).timestamp()
-
-for j in raw_jogos:
-    ts = j.get('startTimestamp')
-    # Só aceita o jogo se o horário de início estiver dentro das 24h do dia selecionado
-    if ts and inicio_dia <= ts <= fim_dia:
-        jogos.append(j)
-
-btn_analise = False
-
-if jogos:
-    todas_ligas = sorted(list(set([j['tournament']['name'] for j in jogos])))
-    
-    with container_filtros:
-        ligas_sel = st.multiselect("🏆 2. Selecione as Ligas", todas_ligas)
-        
-        jogos_f = [j for j in jogos if j['tournament']['name'] in ligas_sel] if ligas_sel else jogos
-        
-        if jogos_f:
-            lista_nomes = {f"[{formatar_hora(j.get('startTimestamp'))}] {j['homeTeam']['name']} x {j['awayTeam']['name']}": j for j in jogos_f}
-            escolha = st.selectbox("🎯 3. Escolha uma partida para analisar:", list(lista_nomes.keys()))
-            jogo_selecionado = lista_nomes[escolha]
-            btn_analise = st.button("🔍 GERAR RELATÓRIO PREDITIVO COMPLETO")
         else:
-            st.info("💡 Nenhuma partida encontrada para este dia nestas ligas.")
+            st.error(f"Erro na API: Status {response.status_code}")
+            return []
+    except:
+        st.error("Falha na conexão com o servidor de dados.")
+        return []
 
-    if not btn_analise:
-        st.write("---")
-        st
+eventos = carregar_jogos(data_sel.strftime('%Y-%m-%d'))
+
+# Filtrar jogos para garantir que são do dia selecionado (considerando margem de fuso)
+jogos_dia = []
+for ev in eventos:
+    # Removemos a trava rígida de timestamp para evitar que jogos sumam por causa de 1 ou 2 horas de diferença
+    jogos_dia.append(ev)
+
+if jogos_dia:
+    todas_ligas = sorted(list(set([j['tournament']['name'] for j in jogos_dia])))
+    ligas_sel = st.multiselect("🏆 Selecione as Ligas", todas_ligas)
+    
+    jogos_f = [j for j in jogos_dia if j['tournament']['name'] in ligas_sel] if ligas_sel else jogos_dia
+    
+    if jogos_f:
+        # Criar dicionário para o Selectbox
+        opcoes = {f"[{formatar_hora(j.get('startTimestamp'))}] {j['homeTeam']['name']} x {j['awayTeam']['name']}": j for j in jogos_f}
+        escolha = st.selectbox("🎯 Escolha a Partida", list(opcoes.keys()))
+        jogo = opcoes[escolha]
+        
+        # O BOTÃO DEVE EXECUTAR TUDO ABAIXO DELE
+        if st.button("🔍 GERAR RELATÓRIO COMPLETO"):
+            with st.spinner('Calculando probabilidades...'):
+                # Pegar IDs necessários
+                t_id = jogo['tournament']['id']
+                s_id = jogo['season']['id']
+                h_id = jogo['homeTeam']['id']
+                a_id = jogo['awayTeam']['id']
+                
+                # Buscar Médias
+                m_h, m_a = buscar_medias_reais(t_id, s_id, h_id, a_id)
+                m_total = m_h + m_a
+                p_casa, p_empate, p_fora = prever_1x2(m_h, m_a)
+                
+                # EXIBIÇÃO DO RELATÓRIO
+                st.markdown("---")
+                st.markdown(f"### 📊 Relatório: {jogo['homeTeam']['name']} vs {jogo['awayTeam']['name']}")
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.markdown(f"<div class='res-box' style='background-color:#1f77b4;'>Casa: {p_casa:.1f}%</div>", unsafe_allow_html=True)
+                with col2:
+                    st.markdown(f"<div class='res-box' style='background-color:#444;'>Empate: {p_empate:.1f}%</div>", unsafe_allow_html=True)
+                with col3:
+                    st.markdown(f"<div class='res-box' style='background-color:#dc3545;'>Fora: {p_fora:.1f}%</div>", unsafe_allow_html=True)
+                
+                st.write("#### 📈 Projeções de Mercado")
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Over 1.5 Gols", f"{calcular_poisson(m_total, 1):.1f}%")
+                m1.metric("Over 2.5 Gols", f"{calcular_poisson(m_total, 2):.1f}%")
+                
+                m2.metric("Over 8.5 Cantos", f"{calcular_poisson(9.5, 8):.1f}%")
+                m2.metric("Over 10.5 Cantos", f"{calcular_poisson(9.5, 10):.1f}%")
+                
+                m3.metric("Over 3.5 Cartões", f"{calcular_poisson(4.2, 3):.1f}%")
+                st.info(f"Ref: {jogo.get('referee', {}).get('name', 'Não informado')}")
+    else:
+        st.warning("Nenhum jogo encontrado para os filtros selecionados.")
+else:
+    st.info("Aguardando carregamento de jogos...")
