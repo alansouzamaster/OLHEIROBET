@@ -6,8 +6,8 @@ from datetime import datetime
 
 # --- CONFIGURAÇÃO DA SUA CHAVE ---
 API_KEY = "
-a19cf6b5fcmsh62790bdb0d293ddp131982jsn24158e88f703
-" 
+a19cf6b5fcmsh62790bdb0d293ddp131982jsn24158e88f703"
+
 HOST = "sportapi7.p.rapidapi.com"
 
 HEADERS = {
@@ -78,3 +78,4 @@ if jogos:
         st.success(f"Análise concluída para: {escolha}")
 else:
     st.warning("Aguardando jogos serem carregados ou nenhum jogo hoje.")
+
