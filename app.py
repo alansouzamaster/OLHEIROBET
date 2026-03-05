@@ -30,12 +30,6 @@ def prever_1x2(m_casa, m_fora):
         p_casa = p_fora = sobra / 2
     return p_casa, p_empate, p_fora
 
-def calcular_btts(m_h, m_a):
-    # Probabilidade de Ambas Marcam (Poisson: P(H>0) * P(A>0))
-    p_h_marca = (1 - math.exp(-m_h)) * 100
-    p_a_marca = (1 - math.exp(-m_a)) * 100
-    return (p_h_marca * p_a_marca) / 100
-
 @st.cache_data(ttl=86400)
 def buscar_medias_reais(tournament_id, season_id, home_id, away_id):
     try:
@@ -58,10 +52,7 @@ def formatar_hora(timestamp):
     if not timestamp: return "--:--"
     return datetime.fromtimestamp(timestamp).strftime('%H:%M')
 
-def formatar_data_br(data_obj):
-    return data_obj.strftime('%d/%m/%Y')
-
-# --- INTERFACE ---
+# --- INTERFACE E CSS ---
 st.set_page_config(page_title="PROBET ANALISE", layout="wide", page_icon="⚽")
 
 st.markdown("""
@@ -84,7 +75,7 @@ st.markdown("---")
 st.markdown("### 🛠️ FILTROS DE BUSCA")
 col_data, col_liga = st.columns([1, 2])
 with col_data:
-    data_sel = st.date_input("📅 Data das Partidas", value=datetime.now(), format="DD/MM/YYYY")
+    data_sel = st.date_input("📅 Data das Partidas", value=datetime.now())
 
 @st.cache_data(ttl=3600)
 def carregar_jogos(data_str):
@@ -105,7 +96,7 @@ if jogos:
         ligas_sel = st.multiselect("🏆 Selecione as Ligas", todas_ligas)
 
     # --- JOGOS QUENTES (SCANNER) ---
-    st.subheader(f"🔥 Destaques para {formatar_data_br(data_sel)}")
+    st.subheader("🔥 Oportunidades em Destaque")
     quentes = [j for j in jogos if random.random() > 0.93][:4]
     
     if quentes:
@@ -115,13 +106,15 @@ if jogos:
                 hora_q = formatar_hora(q.get('startTimestamp'))
                 nome_h = q['homeTeam'].get('shortName', q['homeTeam'].get('name'))
                 nome_a = q['awayTeam'].get('shortName', q['awayTeam'].get('name'))
+                prob_simulada = random.randint(72, 89)
                 
+                # Correção do bloco HTML (Triple Quotes Fechadas Corretamente)
                 st.markdown(f"""
                 <div class='oportunidade-card'>
                     <span class='horario-badge'>🕒 {hora_q}</span><br>
                     <small style='color:#888;'>{q['tournament']['name']}</small><br>
                     <strong>{nome_h} x {nome_a}</strong><br>
-                    <span style='color:#ffc107;'>Over 2.5: {random.randint(72, 89)}%</span>
+                    <span style='color:#ffc107;'>Over 2.5: {prob_simulada}%</span>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -139,11 +132,10 @@ if jogos:
                 m_h, m_a = buscar_medias_reais(jogo['tournament']['id'], jogo['season']['id'], jogo['homeTeam']['id'], jogo['awayTeam']['id'])
                 m_total = m_h + m_a
                 p_c, p_e, p_f = prever_1x2(m_h, m_a)
-                p_btts = calcular_btts(m_h, m_a)
 
             # --- EXIBIÇÃO DO CONFRONTO ---
             hora_f = formatar_hora(jogo.get('startTimestamp'))
-            st.markdown(f"<div style='text-align:center;'><span class='horario-badge'>INÍCIO ÀS {hora_f} - {formatar_data_br(data_sel)}</span></div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='text-align:center;'><span class='horario-badge'>INÍCIO ÀS {hora_f}</span></div>", unsafe_allow_html=True)
             
             c1, c_vs, c2 = st.columns([2, 1, 2])
             with c1: 
@@ -164,13 +156,18 @@ if jogos:
             st.markdown("---")
             m1, m2, m3 = st.columns(3)
             with m1:
-                st.markdown("#### ⚽ MERCADO DE GOLS")
+                st.markdown("#### ⚽ GOLS")
                 st.metric("Over 1.5", f"{calcular_poisson(m_total, 1):.1f}%")
                 st.metric("Over 2.5", f"{calcular_poisson(m_total, 2):.1f}%")
-                st.metric("Ambas Marcam (BTTS)", f"{p_btts:.1f}%")
             with m2:
-                st.markdown("#### 🚩 ESCANTEIOS")
+                st.markdown("#### 🚩 CANTOS")
                 st.metric("Over 8.5", f"{calcular_poisson(9.5, 8):.1f}%")
                 st.metric("Over 10.5", f"{calcular_poisson(9.5, 10):.1f}%")
             with m3:
-                st.markdown("
+                st.markdown("#### 🟨 CARTÕES")
+                st.metric("Over 3.5", f"{calcular_poisson(4.2, 3):.1f}%")
+                st.info(f"⚖️ Juiz: {jogo.get('referee', {}).get('name', 'Pendente')}")
+    else:
+        st.info("💡 Selecione uma liga acima para carregar as partidas.")
+else:
+    st.warning("⚠️ Nenhum jogo disponível para esta data.")
