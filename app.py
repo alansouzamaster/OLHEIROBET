@@ -6,7 +6,7 @@ from datetime import datetime
 
 # --- CONFIGURAÇÃO DA SUA CHAVE ---
 # Lembre-se de manter as aspas e não deixar espaços extras
-API_KEY ="a19cf6b5fcmsh62790bdb0d293ddp131982jsn24158e88f703"
+API_KEY ="aplicativo-padrão_11630320"
 HOST = "rapidapi.com"
 
 
@@ -96,6 +96,7 @@ if jogos:
         st.info("Selecione uma ou mais ligas na barra lateral para listar os jogos.")
 else:
     st.error("Não foi possível carregar os jogos. Verifique sua chave API ou o limite de créditos.")
+
 
 
 
