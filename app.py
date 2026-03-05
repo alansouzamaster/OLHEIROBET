@@ -9,7 +9,7 @@ from datetime import datetime
 API_KEY ="a19cf6b5fcmsh62790bdb0d293ddp131982jsn24158e88f703"
 
 
-HOST = "rapidapi.com"
+HOST = "sportspage-feeds.p.rapidapi.com"
 
 
 HEADERS = {
@@ -98,6 +98,7 @@ if jogos:
         st.info("Selecione uma ou mais ligas na barra lateral para listar os jogos.")
 else:
     st.error("Não foi possível carregar os jogos. Verifique sua chave API ou o limite de créditos.")
+
 
 
 
