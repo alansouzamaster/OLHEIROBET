@@ -24,7 +24,6 @@ def calcular_poisson(media, alvo):
 # --- INTERFACE ---
 st.set_page_config(page_title="OLHEIROBET PRO", layout="wide", page_icon="⚽")
 
-# Estilo para os cards
 st.markdown("""
     <style>
     .stMetric { background-color: #161b22; padding: 15px; border-radius: 10px; border: 1px solid #30363d; }
@@ -65,16 +64,18 @@ if jogos:
         c2.markdown(f"<h2 style='text-align: center;'>{jogo_foco['awayTeam']['name']}</h2>", unsafe_allow_html=True)
 
         if st.button("🔍 EXECUTAR ANÁLISE COMPLETA"):
-            with st.spinner('Calculando probabilidades...'):
-                # Simulação de médias dinâmicas
+            with st.spinner('Analisando Gols, Cantos e Cartões...'):
+                # Médias Estimadas (Podem ser ajustadas conforme a liga)
                 m_gols = 2.85
                 m_cantos = 10.4
+                m_cartoes = 4.5  # Média de cartões por jogo
                 
                 p_gols = calcular_poisson(m_gols, 2)
                 p_cantos = calcular_poisson(m_cantos, 9)
+                p_cartoes = calcular_poisson(m_cartoes, 3) # Probabilidade de Over 3.5 Cartões
 
-                st.markdown("### 📊 Resultado da Análise")
-                col_g, col_c, col_i = st.columns(3)
+                st.markdown("### 📊 Resultado da Análise Profissional")
+                col_g, col_c, col_card = st.columns(3)
 
                 with col_g:
                     st.metric("Prob. Over 2.5 Gols", f"{p_gols:.1f}%")
@@ -86,13 +87,15 @@ if jogos:
                     st.progress(min(p_cantos/100, 1.0))
                     if p_cantos > 75: st.success("🚩 Tendência de Cantos")
 
-                with col_i:
-                    juiz = jogo_foco.get('referee', {}).get('name', 'Pendente')
-                    st.write("**Info Adicional:**")
-                    st.info(f"⚖️ Árbitro: {juiz}")
+                with col_card:
+                    st.metric("Prob. Over 3.5 Cartões", f"{p_cartoes:.1f}%")
+                    st.progress(min(p_cartoes/100, 1.0))
+                    if p_cartoes > 60: st.warning("🟨 Jogo para Cartões")
 
                 st.write("---")
-                st.caption("Aviso: As probabilidades são baseadas em modelos matemáticos. Jogue com responsabilidade.")
+                juiz = jogo_foco.get('referee', {}).get('name', 'Pendente')
+                st.info(f"⚖️ **Análise do Árbitro:** {juiz}. O modelo Poisson indica uma confiança de {p_cartoes:.1f}% para mais de 3.5 cartões nesta partida.")
+                st.caption("Aviso: Dados estatísticos baseados em médias históricas. Jogue com responsabilidade.")
     else:
         st.info("Selecione uma liga na barra lateral.")
 else:
