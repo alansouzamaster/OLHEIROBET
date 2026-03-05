@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import math
 import random
-from datetime import datetime
+from datetime import datetime, time as dt_time
 import time
 
 # --- CONFIGURAÇÃO DA API ---
@@ -39,7 +39,6 @@ def buscar_medias_reais(tournament_id, season_id, home_id, away_id):
             data = response.json()
             standings_list = data.get('standings', [])
             if not standings_list: return 1.5, 1.0
-            
             rows = standings_list[0].get('rows', [])
             m_casa, m_fora = 1.4, 1.1
             for row in rows:
@@ -97,7 +96,19 @@ def carregar_jogos(data_str):
     except Exception:
         return []
 
-jogos = carregar_jogos(data_sel.strftime('%Y-%m-%d'))
+# 1. Carrega todos os eventos da data
+eventos_brutos = carregar_jogos(data_sel.strftime('%Y-%m-%d'))
+
+# 2. FILTRAGEM RÍGIDA: Apenas jogos que começam entre 00:00 e 23:59 do dia selecionado
+jogos = []
+inicio_timestamp = datetime.combine(data_sel, dt_time.min).timestamp()
+fim_timestamp = datetime.combine(data_sel, dt_time.max).timestamp()
+
+for j in eventos_brutos:
+    ts = j.get('startTimestamp')
+    if ts and inicio_timestamp <= ts <= fim_timestamp:
+        jogos.append(j)
+
 btn_analise = False
 
 if jogos:
@@ -113,33 +124,13 @@ if jogos:
             jogo_selecionado = lista_nomes[escolha]
             btn_analise = st.button("🔍 GERAR RELATÓRIO PREDITIVO COMPLETO")
         else:
-            st.info("💡 Nenhuma partida encontrada para os critérios selecionados.")
+            st.info("💡 Nenhuma partida encontrada para as ligas selecionadas neste dia.")
 
-    if not btn_analise:
-        st.write("---")
-        st.subheader(f"🔥 Destaques para {formatar_data_br(data_sel)}")
-        random.seed(data_sel.toordinal())
-        quentes = [j for j in jogos if random.random() > 0.90][:4]
-        
-        if quentes:
-            cols_q = st.columns(len(quentes))
-            for i, q in enumerate(quentes):
-                with cols_q[i]:
-                    hora_q = formatar_hora(q.get('startTimestamp'))
-                    nome_h = q['homeTeam'].get('shortName', q['homeTeam'].get('name'))
-                    nome_a = q['awayTeam'].get('shortName', q['awayTeam'].get('name'))
-                    st.markdown(f"""
-                    <div class='oportunidade-card'>
-                        <span class='horario-badge'>🕒 {hora_q}</span><br>
-                        <small style='color:#888;'>{q['tournament']['name']}</small><br>
-                        <strong>{nome_h} x {nome_a}</strong><br>
-                        <span style='color:#ffc107;'>Over 2.5: {random.randint(72, 89)}%</span>
-                    </div>
-                    """, unsafe_allow_html=True)
-
+    # Exibição de resultados ou destaques...
     if btn_analise:
+        # (O restante do código de análise permanece o mesmo para gerar o relatório)
         st.write("---")
-        with st.spinner('Acessando dados históricos...'):
+        with st.spinner('Calculando probabilidades reais...'):
             m_h, m_a = buscar_medias_reais(
                 jogo_selecionado['tournament']['id'], 
                 jogo_selecionado['season']['id'], 
@@ -148,17 +139,14 @@ if jogos:
             )
             m_total = m_h + m_a
             p_c, p_e, p_f = prever_1x2(m_h, m_a)
-
+            
         hora_f = formatar_hora(jogo_selecionado.get('startTimestamp'))
         st.markdown(f"<div style='text-align:center;'><span class='horario-badge'>INÍCIO ÀS {hora_f} - {formatar_data_br(data_sel)}</span></div>", unsafe_allow_html=True)
         
         c1, c_vs, c2 = st.columns([2, 1, 2])
-        with c1: 
-            st.markdown(f"<h2 style='text-align:center;'>{jogo_selecionado['homeTeam']['name']}</h2><p style='text-align:center; color:#28a745;'>Média Gols: {m_h:.2f}</p>", unsafe_allow_html=True)
-        with c_vs: 
-            st.markdown("<div class='header-vs'>VS</div>", unsafe_allow_html=True)
-        with c2: 
-            st.markdown(f"<h2 style='text-align:center;'>{jogo_selecionado['awayTeam']['name']}</h2><p style='text-align:center; color:#28a745;'>Média Gols: {m_a:.2f}</p>", unsafe_allow_html=True)
+        with c1: st.markdown(f"<h2 style='text-align:center;'>{jogo_selecionado['homeTeam']['name']}</h2><p style='text-align:center;'>Média Gols: {m_h:.2f}</p>", unsafe_allow_html=True)
+        with c_vs: st.markdown("<div class='header-vs'>VS</div>", unsafe_allow_html=True)
+        with c2: st.markdown(f"<h2 style='text-align:center;'>{jogo_selecionado['awayTeam']['name']}</h2><p style='text-align:center;'>Média Gols: {m_a:.2f}</p>", unsafe_allow_html=True)
 
         st.markdown("### 📊 Probabilidades Vitória (1X2)")
         r1, r2, r3 = st.columns(3)
@@ -180,5 +168,6 @@ if jogos:
             st.markdown("#### 🟨 CARTÕES")
             st.metric("Over 3.5", f"{calcular_poisson(4.2, 3):.1f}%")
             st.info(f"⚖️ Juiz: {jogo_selecionado.get('referee', {}).get('name', 'Pendente')}")
+
 else:
-    st.warning(f"⚠️ Nenhum jogo disponível para {formatar_data_br(data_sel)}.")
+    st.warning(f"⚠️ Nenhum jogo agendado para {formatar_data_br(data_sel)}.")
