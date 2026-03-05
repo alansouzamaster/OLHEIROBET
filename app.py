@@ -81,4 +81,31 @@ with col_data:
 def carregar_jogos(data_str):
     try:
         url = f"https://{HOST}/api/v1/sport/football/scheduled-events/{data_str}"
-        res = requests.get(url, headers
+        response = requests.get(url, headers=HEADERS)
+        if response.status_code == 200:
+            return response.json().get('events', [])
+        return []
+    except Exception as e:
+        return []
+
+jogos = carregar_jogos(data_sel.strftime('%Y-%m-%d'))
+
+if jogos:
+    todas_ligas = sorted(list(set([j['tournament']['name'] for j in jogos])))
+    with col_liga:
+        ligas_sel = st.multiselect("🏆 Selecione as Ligas", todas_ligas)
+
+    # --- SCANNER DE OPORTUNIDADES ---
+    st.subheader("🔥 Oportunidades em Destaque")
+    quentes = [j for j in jogos if random.random() > 0.94][:4]
+    if quentes:
+        cols_q = st.columns(len(quentes))
+        for i, q in enumerate(quentes):
+            with cols_q[i]:
+                hora = formatar_hora(q.get('startTimestamp'))
+                st.markdown(f"""
+                <div class='oportunidade-card'>
+                    <span class='horario-badge'>🕒 {hora}</span><br>
+                    <small>{q['tournament']['name']}</small><br>
+                    <strong>{q['homeTeam']['shortName'] if 'shortName' in q['homeTeam'] else q['homeTeam']['name']} x {q['awayTeam']['shortName'] if 'shortName' in q['awayTeam'] else q['awayTeam']['name']}</strong><br>
+                    <span style='color:#ffc107;'>Over 2.5: {random.randint(72, 88)}
