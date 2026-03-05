@@ -4,13 +4,14 @@ import math
 import random
 from datetime import datetime
 import time
+import plotly.graph_objects as go
 
 # --- CONFIGURAÇÃO DA API ---
 API_KEY = "a19cf6b5fcmsh62790bdb0d293ddp131982jsn24158e88f703"
 HOST = "sportapi7.p.rapidapi.com"
 HEADERS = {"X-RapidAPI-Key": API_KEY, "X-RapidAPI-Host": HOST}
 
-# --- FUNÇÕES MATEMÁTICAS ---
+# --- FUNÇÕES DE CÁLCULO ---
 def calcular_poisson(media, alvo):
     if media <= 0: return 0
     prob_acumulada = 0
@@ -21,7 +22,7 @@ def calcular_poisson(media, alvo):
 
 def prever_1x2(m_casa, m_fora):
     total = m_casa + m_fora
-    p_empate = 25.0
+    p_empate = 26.0
     sobra = 100 - p_empate
     if total > 0:
         p_casa = sobra * (m_casa / total)
@@ -30,150 +31,109 @@ def prever_1x2(m_casa, m_fora):
         p_casa = p_fora = sobra / 2
     return p_casa, p_empate, p_fora
 
-def formatar_hora(timestamp):
-    return datetime.fromtimestamp(timestamp).strftime('%H:%M')
+@st.cache_data(ttl=86400)
+def buscar_stats_completos(tournament_id, season_id, home_id, away_id):
+    try:
+        url = f"https://{HOST}/api/v1/tournament/{tournament_id}/season/{season_id}/standings/total"
+        response = requests.get(url, headers=HEADERS)
+        
+        stats = {
+            "home": {"gols_f": 1.5, "gols_s": 1.1, "vitorias": 50, "posse": 52},
+            "away": {"gols_f": 1.2, "gols_s": 1.3, "vitorias": 40, "posse": 48}
+        }
+        
+        if response.status_code == 200:
+            standings = response.json().get('standings', [{}])[0].get('rows', [])
+            for row in standings:
+                t_id = row['team']['id']
+                if t_id == home_id:
+                    stats["home"] = {"gols_f": row['scoresFor']/row['matches'], "gols_s": row['scoresAgainst']/row['matches'], "win_rate": (row['wins']/row['matches'])*100}
+                if t_id == away_id:
+                    stats["away"] = {"gols_f": row['scoresFor']/row['matches'], "gols_s": row['scoresAgainst']/row['matches'], "win_rate": (row['wins']/row['matches'])*100}
+        return stats
+    except:
+        return stats
 
-def exibir_forma(resultados):
-    html = ""
-    for r in resultados:
-        cor = "#28a745" if r == "V" else "#ffc107" if r == "E" else "#dc3545"
-        html += f'<span style="display:inline-block; width:22px; height:22px; background-color:{cor}; border-radius:4px; margin-right:4px; text-align:center; color:white; font-size:12px; line-height:22px; font-weight:bold;">{r}</span>'
-    return html
+def radar_comparativo(nome_h, stats_h, nome_a, stats_a):
+    categories = ['Ataque (Gols)', 'Defesa (Gols Sofridos Inv.)', 'Aproveitamento %', 'Força Ofensiva']
+    
+    # Invertemos a defesa para que "mais alto" no gráfico seja melhor (menos gols sofridos)
+    val_h = [stats_h['gols_f'], 3 - stats_h['gols_s'], stats_h['win_rate']/10, stats_h['gols_f']*1.2]
+    val_a = [stats_a['gols_f'], 3 - stats_a['gols_s'], stats_a['win_rate']/10, stats_a['gols_f']*1.2]
 
-# --- INTERFACE E CSS ---
+    fig = go.Figure()
+    fig.add_trace(go.Scatterpolar(r=val_h, theta=categories, fill='toself', name=nome_h, line_color='#ffc107'))
+    fig.add_trace(go.Scatterpolar(r=val_a, theta=categories, fill='toself', name=nome_a, line_color='#1f77b4'))
+
+    fig.update_layout(
+        polar=dict(radialaxis=dict(visible=False), bgcolor="#1c2128"),
+        showlegend=True, paper_bgcolor="#0e1117", font_color="white", height=400,
+        margin=dict(l=80, r=80, t=20, b=20)
+    )
+    return fig
+
+# --- INTERFACE ---
 st.set_page_config(page_title="PROBET ANALISE", layout="wide", page_icon="⚽")
-
-st.markdown("""
-    <style>
-    .stApp { background-color: #0e1117; color: #e0e0e0; }
-    div[data-testid="stMetricValue"] { color: #ffc107 !important; font-size: 24px !important; }
-    .stMetric { background-color: #1c2128; padding: 15px; border-radius: 12px; border: 1px solid #30363d; }
-    .oportunidade-card { background-color: #1c2128; padding: 15px; border-top: 3px solid #ffc107; border-radius: 8px; margin-bottom: 10px; height: 160px;}
-    .stButton>button { width: 100%; background-color: #ffc107 !important; color: black !important; font-weight: bold; border: none; padding: 12px; border-radius: 8px; font-size: 16px; }
-    .mercado-titulo { color: #ffc107; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #333; }
-    .res-box { text-align: center; padding: 10px; border-radius: 6px; font-weight: bold; color: white; }
-    .horario-badge { background-color: #333; color: #ffc107; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; }
-    </style>
-    """, unsafe_allow_html=True)
+st.markdown("<style>.stApp { background-color: #0e1117; color: #e0e0e0; } .stMetric { background-color: #1c2128; padding: 15px; border-radius: 12px; border: 1px solid #30363d; } .res-box { text-align: center; padding: 10px; border-radius: 6px; font-weight: bold; color: white; }</style>", unsafe_allow_html=True)
 
 st.title(" ⚽ PROBET ANALISE ")
-st.markdown("---")
 
-# --- MENU CENTRALIZADO ---
-st.markdown("### 🛠️ FILTROS DE BUSCA")
-col_data, col_liga = st.columns([1, 2])
-
-with col_data:
-    data_sel = st.date_input("📅 Data das Partidas", value=datetime.now())
+# --- FILTROS ---
+col_d, col_l = st.columns([1, 2])
+data_sel = col_d.date_input("📅 Data", value=datetime.now())
 
 @st.cache_data(ttl=3600)
 def carregar_jogos(data_str):
     try:
         url = f"https://{HOST}/api/v1/sport/football/scheduled-events/{data_str}"
-        response = requests.get(url, headers=HEADERS)
-        return response.json().get('events', []) if response.status_code == 200 else []
+        res = requests.get(url, headers=HEADERS)
+        return res.json().get('events', []) if res.status_code == 200 else []
     except: return []
 
 jogos = carregar_jogos(data_sel.strftime('%Y-%m-%d'))
 
 if jogos:
-    with col_liga:
-        todas_ligas = sorted(list(set([j['tournament']['name'] for j in jogos])))
-        ligas_sel = st.multiselect("🏆 Filtrar por Ligas", todas_ligas)
-
-    # --- SCANNER DE OPORTUNIDADES DO DIA (+2.5 GOLS) ---
-    st.subheader(f"🔥 Melhores Oportunidades de Gols - {data_sel.strftime('%d/%m')}")
+    todas_ligas = sorted(list(set([j['tournament']['name'] for j in jogos])))
+    ligas_sel = col_l.multiselect("🏆 Ligas", todas_ligas)
     
-    # Lógica de Scanner: Filtra jogos com média simulada alta para Over 2.5
-    lista_quentes = []
-    for j in jogos:
-        m_simulada = random.uniform(2.1, 3.5) # Em produção, aqui entraria a média real histórica
-        prob_over = calcular_poisson(m_simulada, 2)
-        if prob_over > 70: # Apenas jogos com mais de 70% de chance de Over 2.5
-            lista_quentes.append({'jogo': j, 'prob': prob_over})
+    jogos_f = [j for j in jogos if j['tournament']['name'] in ligas_sel] if ligas_sel else jogos
     
-    # Ordena pelos mais prováveis e pega os 4 melhores
-    lista_quentes = sorted(lista_quentes, key=lambda x: x['prob'], reverse=True)[:4]
-
-    if lista_quentes:
-        cols_q = st.columns(len(lista_quentes))
-        for i, item in enumerate(lista_quentes):
-            q = item['jogo']
-            hora = formatar_hora(q.get('startTimestamp', 0))
-            with cols_q[i]:
-                st.markdown(f"""
-                <div class='oportunidade-card'>
-                    <span class='horario-badge'>🕒 {hora}</span><br>
-                    <small style='color:#888;'>{q['tournament']['name']}</small><br>
-                    <strong style='font-size:14px;'>{q['homeTeam']['shortName'] if 'shortName' in q['homeTeam'] else q['homeTeam']['name']} x {q['awayTeam']['shortName'] if 'shortName' in q['awayTeam'] else q['awayTeam']['name']}</strong><br><br>
-                    <span style='color:#ffc107; font-weight:bold;'>Over 2.5 Gols: {item['prob']:.1f}%</span>
-                </div>
-                """, unsafe_allow_html=True)
-    else:
-        st.info("Buscando tendências de mercado para hoje...")
-
-    st.write("---")
-
-    # --- SELEÇÃO DE JOGO ---
-    jogos_filtrados = [j for j in jogos if j['tournament']['name'] in ligas_sel] if ligas_sel else jogos
-
-    if jogos_filtrados:
-        lista_nomes = {
-            f"[{formatar_hora(j.get('startTimestamp'))}] {j['homeTeam']['name']} x {j['awayTeam']['name']}": j 
-            for j in jogos_filtrados
-        }
-        escolha = st.selectbox("🎯 Selecione uma partida para análise detalhada:", list(lista_nomes.keys()))
-        jogo_foco = lista_nomes[escolha]
-        hora_foco = formatar_hora(jogo_foco.get('startTimestamp'))
+    if jogos_f:
+        lista = {f"[{datetime.fromtimestamp(j.get('startTimestamp', 0)).strftime('%H:%M')}] {j['homeTeam']['name']} x {j['awayTeam']['name']}": j for j in jogos_f}
+        escolha = st.selectbox("🎯 Escolha a Partida:", list(lista.keys()))
+        jogo = lista[escolha]
         
-        # --- CABEÇALHO CONFRONTO ---
-        st.markdown(f"<div style='text-align:center; margin-bottom:10px;'><span class='horario-badge' style='font-size:16px;'>INÍCIO ÀS {hora_foco}</span></div>", unsafe_allow_html=True)
-        c_h, c_v, c_a = st.columns([2, 1, 2])
-        with c_h:
-            st.markdown(f"<h2 style='text-align: center;'>{jogo_foco['homeTeam']['name']}</h2>", unsafe_allow_html=True)
-            st.markdown(f"<div style='text-align: center;'>{exibir_forma(['V','V','E','D','V'])}</div>", unsafe_allow_html=True)
-        with c_v:
-            st.markdown("<h1 style='text-align: center; color: #30363d; margin-top: 15px;'>VS</h1>", unsafe_allow_html=True)
-        with c_a:
-            st.markdown(f"<h2 style='text-align: center;'>{jogo_foco['awayTeam']['name']}</h2>", unsafe_allow_html=True)
-            st.markdown(f"<div style='text-align: center;'>{exibir_forma(['D','E','D','D','V'])}</div>", unsafe_allow_html=True)
-
-        st.markdown("<br>", unsafe_allow_html=True)
         if st.button("🔍 GERAR RELATÓRIO PREDITIVO COMPLETO"):
-            # Médias para cálculo
-            m_casa, m_fora = 1.8, 1.2
-            m_gols = m_casa + m_fora
-            m_cantos, m_cartoes = 10.5, 4.2
-            
-            # Resultado 1X2
-            p_c, p_e, p_f = prever_1x2(m_casa, m_fora)
-            st.markdown("### 📊 Probabilidades 1X2")
-            r1, r2, r3 = st.columns(3)
-            r1.markdown(f"<div class='res-box' style='background-color:#1f77b4;'>Casa: {p_c:.1f}%</div>", unsafe_allow_html=True)
-            r2.markdown(f"<div class='res-box' style='background-color:#444;'>Empate: {p_e:.1f}%</div>", unsafe_allow_html=True)
-            r3.markdown(f"<div class='res-box' style='background-color:#dc3545;'>Visitante: {p_f:.1f}%</div>", unsafe_allow_html=True)
+            with st.spinner('Processando estatísticas...'):
+                s = buscar_stats_completos(jogo['tournament']['id'], jogo['season']['id'], jogo['homeTeam']['id'], jogo['awayTeam']['id'])
+                m_gols = s['home']['gols_f'] + s['away']['gols_f']
+                
+                # --- LAYOUT DE RESULTADO ---
+                st.markdown("### 📊 Comparativo de Força")
+                c_radar, c_1x2 = st.columns([2, 1])
+                
+                with c_radar:
+                    st.plotly_chart(radar_comparativo(jogo['homeTeam']['shortName'], s['home'], jogo['awayTeam']['shortName'], s['away']), use_container_width=True)
+                
+                with c_1x2:
+                    p_c, p_e, p_f = prever_1x2(s['home']['gols_f'], s['away']['gols_f'])
+                    st.markdown("<br><br>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='res-box' style='background-color:#ffc107; color:black;'>Casa: {p_c:.1f}%</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='res-box' style='background-color:#444;'>Empate: {p_e:.1f}%</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='res-box' style='background-color:#1f77b4;'>Fora: {p_f:.1f}%</div>", unsafe_allow_html=True)
 
-            st.markdown("<br>", unsafe_allow_html=True)
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.markdown("<div class='mercado-titulo'>⚽ GOLS</div>", unsafe_allow_html=True)
-                st.metric("Over 0.5 Gols", f"{calcular_poisson(m_gols, 0):.1f}%")
-                st.metric("Over 1.5 Gols", f"{calcular_poisson(m_gols, 1):.1f}%")
-                st.metric("Over 2.5 Gols", f"{calcular_poisson(m_gols, 2):.1f}%")
-            
-            with col2:
-                st.markdown("<div class='mercado-titulo'>🚩 ESCANTEIOS</div>", unsafe_allow_html=True)
-                st.metric("Over 4.5 Cantos", f"{calcular_poisson(m_cantos, 4):.1f}%")
-                st.metric("Over 7.5 Cantos", f"{calcular_poisson(m_cantos, 7):.1f}%")
-                st.metric("Over 9.5 Cantos", f"{calcular_poisson(m_cantos, 9):.1f}%")
-
-            with col3:
-                st.markdown("<div class='mercado-titulo'>🟨 CARTÕES</div>", unsafe_allow_html=True)
-                st.metric("Over 1.5 Cartões", f"{calcular_poisson(m_cartoes, 1):.1f}%")
-                st.metric("Over 3.5 Cartões", f"{calcular_poisson(m_cartoes, 3):.1f}%")
-                st.info(f"⚖️ Juiz: {jogo_foco.get('referee', {}).get('name', 'Pendente')}")
-    else:
-        st.info("💡 Selecione as ligas acima para carregar as partidas.")
-else:
-    st.warning("⚠️ Não foram encontrados eventos para esta data.")
+                # --- MÉTRICAS ---
+                st.markdown("---")
+                m1, m2, m3 = st.columns(3)
+                with m1:
+                    st.subheader("⚽ Gols")
+                    st.metric("Over 1.5", f"{calcular_poisson(m_gols, 1):.1f}%")
+                    st.metric("Over 2.5", f"{calcular_poisson(m_gols, 2):.1f}%")
+                with m2:
+                    st.subheader("🚩 Cantos")
+                    st.metric("Over 8.5", f"{calcular_poisson(9.2, 8):.1f}%")
+                    st.metric("Over 10.5", f"{calcular_poisson(9.2, 10):.1f}%")
+                with m3:
+                    st.subheader("🟨 Cartões")
+                    st.metric("Over 3.5", f"{calcular_poisson(4.5, 3):.1f}%")
+                    st.metric("Juiz", jogo.get('referee', {}).get('name', 'Pendente'))
