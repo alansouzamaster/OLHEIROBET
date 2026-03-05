@@ -36,10 +36,81 @@ def exibir_forma(resultados):
 # --- INTERFACE E CSS ---
 st.set_page_config(page_title="OLHEIROBET PRO", layout="wide", page_icon="⚽")
 
+# BLOCO CSS CORRIGIDO
 st.markdown("""
     <style>
     .stApp { background-color: #0e1117; color: #e0e0e0; }
     div[data-testid="stMetricValue"] { color: #ffc107 !important; font-size: 24px !important; }
     .stMetric { background-color: #1c2128; padding: 15px; border-radius: 12px; border: 1px solid #30363d; }
     .oportunidade-card { background-color: #1c2128; padding: 15px; border-top: 3px solid #ffc107; border-radius: 8px; margin-bottom: 10px; height: 120px; }
-    .st
+    .stButton>button { width: 100%; background-color: #ffc107 !important; color: black !important; font-weight: bold; border-radius: 8px; }
+    .mercado-titulo { color: #ffc107; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #333; }
+    .box-1x2 { text-align: center; padding: 10px; border-radius: 5px; font-weight: bold; margin: 2px; color: white; }
+    </style>
+    """, unsafe_allow_html=True)
+
+st.title("⚽ OLHEIROBET PRO")
+
+# --- SIDEBAR ---
+st.sidebar.markdown("<h2 style='color: #ffc107;'>MENU</h2>", unsafe_allow_html=True)
+data_sel = st.sidebar.date_input("Escolha a Data", value=datetime.now())
+
+@st.cache_data(ttl=3600)
+def carregar_jogos(data_str):
+    try:
+        url = f"https://{HOST}/api/v1/sport/football/scheduled-events/{data_str}"
+        response = requests.get(url, headers=HEADERS)
+        if response.status_code == 200:
+            return response.json().get('events', [])
+        return []
+    except:
+        return []
+
+jogos = carregar_jogos(data_sel.strftime('%Y-%m-%d'))
+
+if jogos:
+    # --- JOGOS QUENTES ---
+    st.subheader("🔥 Oportunidades do Dia (+2.5 Gols)")
+    quentes = [j for j in jogos if random.random() > 0.90][:4]
+    
+    if quentes:
+        cols_q = st.columns(len(quentes))
+        for i, q in enumerate(quentes):
+            prob_ex = random.randint(72, 89)
+            with cols_q[i]:
+                # String simples para evitar erro de triple-quote
+                card_html = f"<div class='oportunidade-card'><small>{q['tournament']['name']}</small><br><strong>{q['homeTeam']['name']} x {q['awayTeam']['name']}</strong><br><span style='color:#ffc107;'>Prob: {prob_ex}%</span></div>"
+                st.markdown(card_html, unsafe_allow_html=True)
+    
+    st.write("---")
+
+    # --- SELEÇÃO DE LIGAS E JOGOS ---
+    todas_ligas = sorted(list(set([j['tournament']['name'] for j in jogos])))
+    ligas_sel = st.sidebar.multiselect("Selecione as Ligas (Ex: Brazil):", todas_ligas)
+    jogos_filtrados = [j for j in jogos if j['tournament']['name'] in ligas_sel]
+
+    if jogos_filtrados:
+        lista_nomes = {f"{j['tournament']['name']} | {j['homeTeam']['name']} x {j['awayTeam']['name']}": j for j in jogos_filtrados}
+        escolha = st.selectbox("🎯 Selecione a partida:", list(lista_nomes.keys()))
+        jogo_foco = lista_nomes[escolha]
+        
+        c_h, c_v, c_a = st.columns([2, 1, 2])
+        with c_h:
+            st.markdown(f"<h3 style='text-align: center;'>{jogo_foco['homeTeam']['name']}</h3>", unsafe_allow_html=True)
+            st.markdown(f"<div style='text-align: center;'>{exibir_forma(['V','V','E','D','V'])}</div>", unsafe_allow_html=True)
+        with c_v:
+            st.markdown("<h2 style='text-align: center; color: #30363d;'>VS</h2>", unsafe_allow_html=True)
+        with c_a:
+            st.markdown(f"<h3 style='text-align: center;'>{jogo_foco['awayTeam']['name']}</h3>", unsafe_allow_html=True)
+            st.markdown(f"<div style='text-align: center;'>{exibir_forma(['D','E','D','D','V'])}</div>", unsafe_allow_html=True)
+
+        if st.button("🔍 EXECUTAR ANÁLISE COMPLETA"):
+            # Médias simuladas para o relatório
+            m_casa, m_fora = 1.8, 1.2
+            m_gols, m_cantos, m_cartoes = (m_casa + m_fora), 10.4, 4.8
+            p_h, p_e, p_a = prever_1x2(m_casa, m_fora)
+
+            st.markdown("### 📊 Probabilidades 1X2")
+            r1, rX, r2 = st.columns(3)
+            r1.markdown(f"<div class='box-1x2' style='background-color:#1f77b4;'>Casa: {p_h:.1f}%</div>", unsafe_allow_html=True)
+            rX
