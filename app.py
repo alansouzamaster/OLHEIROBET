@@ -37,6 +37,7 @@ def carregar_jogos():
 jogos = carregar_jogos()
 
 if jogos:
+    if jogos:
     # --- 1. FILTRO LATERAL DE LIGAS ---
     st.sidebar.header("Filtros")
     todas_ligas = sorted(list(set([j['tournament']['name'] for j in jogos])))
@@ -93,8 +94,6 @@ if jogos:
         st.info("Selecione uma liga na barra lateral para ver os jogos.")
 else:
     st.warning("Nenhum jogo encontrado para hoje.")
-    jogo_foco = lista_jogos[escolha]
-    id_evento = jogo_foco['id']
 
     if st.button("🔍 GERAR PROBABILIDADES"):
         # 2. Buscar Médias (Simulado via API)
@@ -129,6 +128,7 @@ else:
         st.success(f"Análise concluída para: {escolha}")
 else:
     st.warning("Aguardando jogos serem carregados ou nenhum jogo hoje.")
+
 
 
 
