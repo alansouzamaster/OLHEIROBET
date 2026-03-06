@@ -4,7 +4,8 @@ import math
 from datetime import datetime
 
 # --- CONFIGURAÇÃO DA API ---
-API_KEY = "3a5c2b926bmsh18b3c4624ec302bp1911efjsn84e2922978ff"
+API_KEY = "e159a1f08emshe4de0ad5f02ec19p1aa84cjsnb75151d191f2"
+
 HOST = "sportapi7.p.rapidapi.com"
 HEADERS = {"X-RapidAPI-Key": API_KEY, "X-RapidAPI-Host": HOST}
 
@@ -172,3 +173,4 @@ if st.session_state.analise_pronta and st.session_state.jogo_selecionado:
 
 elif not jogos:
     st.info("Nenhum jogo encontrado para a data selecionada.")
+
