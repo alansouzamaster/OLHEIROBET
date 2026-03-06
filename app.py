@@ -105,5 +105,5 @@ with c2:
     ligas = sorted(list(set([j['tournament']['name'] for j in jogos_dia])))
     ligas_sel = st.multiselect("🏆 Ligas", ligas)
 
-# --- EXECUÇÃO ---
-jogos_f = [j
+
+
