@@ -52,16 +52,12 @@ def buscar_dados_l10(team_id):
     return 1.5, 1.2, []
 
 def calcular_probabilidades_1x2(h_m, h_s, a_m, a_s):
-    # Lógica de Força: (Gols Marcados + Gols Sofridos pelo adversário)
     forca_casa = (h_m + a_s) / 2
     forca_fora = (a_m + h_s) / 2
-    total = forca_casa + forca_fora + 0.5 # 0.5 é a constante de empate
-    
+    total = forca_casa + forca_fora + 0.6
     p_casa = (forca_casa / total) * 100
     p_fora = (forca_fora / total) * 100
     p_empate = 100 - p_casa - p_fora
-    
-    # Ajuste de margem para evitar valores extremos irreais
     return max(min(p_casa, 75), 15), max(min(p_empate, 40), 10), max(min(p_fora, 75), 15)
 
 def exibir_forma(lista_resultados):
@@ -73,15 +69,11 @@ def exibir_forma(lista_resultados):
     return html
 
 def barra_dinamica(label, prob, color_mode="normal"):
-    if color_mode == "1x2":
-        cor = "#ffcc00" # Dourado para 1X2
-    else:
-        cor = "#ff4b4b" if prob < 50 else ("#ffcc00" if prob < 75 else "#00ff88")
-    
+    cor = "#ffcc00" if color_mode == "1x2" else ("#ff4b4b" if prob < 50 else ("#ffcc00" if prob < 75 else "#00ff88"))
     st.write(f"**{label}:** {prob:.1f}%")
     st.markdown(f"""
-        <div style="background-color: #1e252e; border-radius: 10px; height: 10px; width: 100%; margin-bottom: 15px;">
-            <div style="background-color: {cor}; width: {prob}%; height: 100%; border-radius: 10px; box-shadow: 0 0 10px {cor}aa;"></div>
+        <div style="background-color: #1e252e; border-radius: 10px; height: 8px; width: 100%; margin-bottom: 12px;">
+            <div style="background-color: {cor}; width: {prob}%; height: 100%; border-radius: 10px; box-shadow: 0 0 8px {cor}aa;"></div>
         </div>
     """, unsafe_allow_html=True)
     return prob
@@ -95,36 +87,34 @@ def carregar_jogos(d):
     except: return []
 
 # --- INTERFACE ---
-st.set_page_config(page_title="PROBET ADVANCED AI", layout="wide")
+st.set_page_config(page_title="PROBET EXPERT v12", layout="wide")
 
 st.markdown("""
 <style>
     .stApp { background-color: #05070a; color: white; }
-    .card-1x2 { background: linear-gradient(145deg, #1a1a2e, #0f0f1a); border: 2px solid #ffcc00; padding: 20px; border-radius: 15px; margin-bottom: 20px; box-shadow: 0 0 15px rgba(255, 204, 0, 0.15); }
+    .card-1x2 { background: linear-gradient(145deg, #1a1a2e, #0f0f1a); border: 2px solid #ffcc00; padding: 20px; border-radius: 15px; margin-bottom: 20px; }
     .card-gols { background: linear-gradient(145deg, #0a2e1f, #05140d); border: 2px solid #00ff88; padding: 20px; border-radius: 15px; }
-    .card-cantos { background: linear-gradient(145deg, #0a1f3d, #050d1a); border: 2px solid #00d4ff; padding: 20px; border-radius: 15px; }
-    .card-cards { background: linear-gradient(145deg, #3d2e0a, #1a1405); border: 2px solid #ff4b4b; padding: 20px; border-radius: 15px; }
+    .stat-box { background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; text-align: center; margin-top: 10px; }
     .card-palpite { background: linear-gradient(145deg, #2e0a2e, #140514); border: 2px dashed #ff00ff; padding: 25px; border-radius: 15px; text-align: center; margin-top: 25px; }
-    h1 { text-shadow: 0 0 15px #ffcc00; color: #ffcc00 !important; text-align: center; font-weight: 900; }
-    .header-market { font-size: 1.1rem; font-weight: 800; text-align: center; margin-bottom: 15px; letter-spacing: 1px; }
+    h1 { text-shadow: 0 0 15px #ffcc00; color: #ffcc00 !important; text-align: center; }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ PROBET PREDICTOR v11.0")
+st.title("PRO ANÁLISE ESPORTIVA")
 
 data_sel = st.date_input("📅 Data das Partidas", value=datetime.now())
 jogos = carregar_jogos(data_sel.strftime('%Y-%m-%d'))
 
 if jogos:
     ligas = sorted(list(set([j['tournament']['name'] for j in jogos])))
-    ligas_sel = st.multiselect("🏆 Filtrar por Ligas", ligas)
+    ligas_sel = st.multiselect("🏆 Filtrar Ligas", ligas)
     jogos_f = [j for j in jogos if j['tournament']['name'] in ligas_sel] if ligas_sel else jogos
     
     if jogos_f:
         opcoes = {f"[{ajustar_horario(j.get('startTimestamp', 0))}] {j['homeTeam']['name']} x {j['awayTeam']['name']}": j for j in jogos_f}
-        escolha = st.selectbox("🎯 Escolha o Jogo para Analisar", list(opcoes.keys()))
+        escolha = st.selectbox("🎯 Selecione o Jogo", list(opcoes.keys()))
         
-        if st.button("🔍 EXECUTAR ANÁLISE DE MOMENTO (L10)"):
+        if st.button("🔍 ANALISAR MÉDIAS E PERFORMANCE (L10)"):
             st.session_state.jogo_selecionado = opcoes[escolha]
             st.session_state.analise_pronta = True
 
@@ -132,72 +122,71 @@ if st.session_state.analise_pronta and st.session_state.jogo_selecionado:
     j = st.session_state.jogo_selecionado
     h_m, h_s, h_seq = buscar_dados_l10(j['homeTeam']['id'])
     a_m, a_s, a_seq = buscar_dados_l10(j['awayTeam']['id'])
-    
-    # 1X2 Probabilidades Reais baseadas em L10
-    prob_v_casa, prob_empate, prob_v_fora = calcular_probabilidades_1x2(h_m, h_s, a_m, a_s)
-    
+    p_v_casa, p_e, p_v_fora = calcular_probabilidades_1x2(h_m, h_s, a_m, a_s)
+    exp_gols = ((h_m + a_s)/2) + ((a_m + h_s)/2)
+
     st.divider()
-    # Cabeçalho VS com Formas
+    # Cabeçalho com Médias de Gols
     col_h, col_vs, col_a = st.columns([2, 1, 2])
     with col_h:
         st.markdown(f"<h2 style='text-align:center;'>{j['homeTeam']['name']}</h2>", unsafe_allow_html=True)
         st.markdown(exibir_forma(h_seq), unsafe_allow_html=True)
+        st.markdown(f"""<div class='stat-box'>⚽ Marcados: <b>{h_m:.1f}</b> | 🛡️ Sofridos: <b>{h_s:.1f}</b></div>""", unsafe_allow_html=True)
     with col_vs:
-        st.markdown("<h1 style='font-size: 45px; margin-top: 10px;'>VS</h1>", unsafe_allow_html=True)
+        st.markdown("<h1 style='font-size: 45px; margin-top: 20px;'>VS</h1>", unsafe_allow_html=True)
     with col_a:
         st.markdown(f"<h2 style='text-align:center;'>{j['awayTeam']['name']}</h2>", unsafe_allow_html=True)
         st.markdown(exibir_forma(a_seq), unsafe_allow_html=True)
+        st.markdown(f"""<div class='stat-box'>⚽ Marcados: <b>{a_m:.1f}</b> | 🛡️ Sofridos: <b>{a_s:.1f}</b></div>""", unsafe_allow_html=True)
 
-    # --- NOVO CARD 1X2 DINÂMICO ---
+    # Probabilidades 1X2
     st.markdown("<div class='card-1x2'>", unsafe_allow_html=True)
-    st.markdown("<p class='header-market' style='color:#ffcc00;'>📊 PROBABILIDADES 1X2 (BASEADO NOS ÚLTIMOS 10 JOGOS)</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center; font-weight:800; color:#ffcc00;'>ESTIMATIVA DE RESULTADO FINAL (L10)</p>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
-    with c1: barra_dinamica(f"Vitória {j['homeTeam']['name']}", prob_v_casa, "1x2")
-    with c2: barra_dinamica("Empate", prob_empate, "1x2")
-    with c3: barra_dinamica(f"Vitória {j['awayTeam']['name']}", prob_v_fora, "1x2")
+    with c1: barra_dinamica(f"Vitória {j['homeTeam']['name']}", p_v_casa, "1x2")
+    with c2: barra_dinamica("Empate", p_e, "1x2")
+    with c3: barra_dinamica(f"Vitória {j['awayTeam']['name']}", p_v_fora, "1x2")
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # Mercados Adicionais
-    exp_gols = ((h_m + a_s)/2) + ((a_m + h_s)/2)
-    probs = {}
-    
+    # Mercados Gols, Cantos e Cartões
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown("<div class='card-gols'>", unsafe_allow_html=True)
-        st.markdown("<p class='header-market' style='color:#00ff88;'>⚽ GOLS (POISSON L10)</p>", unsafe_allow_html=True)
-        probs['O15'] = barra_dinamica("Over 1.5 Gols", calcular_poisson(exp_gols, 1))
-        probs['O25'] = barra_dinamica("Over 2.5 Gols", calcular_poisson(exp_gols, 2))
+        st.markdown("<p style='text-align:center; color:#00ff88; font-weight:800;'>⚽ GOLS</p>", unsafe_allow_html=True)
+        p15 = barra_dinamica("Over 1.5", calcular_poisson(exp_gols, 1))
+        p25 = barra_dinamica("Over 2.5", calcular_poisson(exp_gols, 2))
         st.markdown("</div>", unsafe_allow_html=True)
 
     with col2:
-        st.markdown("<div class='card-cantos'>", unsafe_allow_html=True)
-        st.markdown("<p class='header-market' style='color:#00d4ff;'>🚩 CANTOS (ESTIMATIVA)</p>", unsafe_allow_html=True)
-        probs['C55'] = barra_dinamica("Over 5.5 Cantos", 86.5)
-        probs['C85'] = barra_dinamica("Over 8.5 Cantos", 61.2)
+        st.markdown("<div style='background: linear-gradient(145deg, #0a1f3d, #050d1a); border: 2px solid #00d4ff; padding: 20px; border-radius: 15px;'>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align:center; color:#00d4ff; font-weight:800;'>🚩 CANTOS</p>", unsafe_allow_html=True)
+        barra_dinamica("Over 5.5", 87.2)
+        barra_dinamica("Over 8.5", 61.5)
         st.markdown("</div>", unsafe_allow_html=True)
 
     with col3:
-        st.markdown("<div class='card-cards'>", unsafe_allow_html=True)
-        st.markdown("<p class='header-market' style='color:#ff4b4b;'>🟨 CARTÕES (ESTIMATIVA)</p>", unsafe_allow_html=True)
-        probs['CT15'] = barra_dinamica("Over 1.5 Cartões", 92.0)
-        probs['CT35'] = barra_dinamica("Over 3.5 Cartões", 48.3)
+        st.markdown("<div style='background: linear-gradient(145deg, #3d0a0a, #1a0505); border: 2px solid #ff4b4b; padding: 20px; border-radius: 15px;'>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align:center; color:#ff4b4b; font-weight:800;'>🟨 CARTÕES</p>", unsafe_allow_html=True)
+        barra_dinamica("Over 1.5", 93.1)
+        barra_dinamica("Over 3.5", 46.8)
         st.markdown("</div>", unsafe_allow_html=True)
 
     # Palpite Sugerido
     sugestoes = []
-    if prob_v_casa > 60: sugestoes.append(f"🏠 Vitória {j['homeTeam']['name']}")
-    elif prob_v_fora > 60: sugestoes.append(f"🚀 Vitória {j['awayTeam']['name']}")
-    if probs['O15'] > 80: sugestoes.append("🔥 Over 1.5 Gols")
+    if p_v_casa > 65: sugestoes.append(f"🏠 Mandante para Vencer")
+    elif p_v_fora > 65: sugestoes.append(f"🚀 Visitante para Vencer")
+    if p15 > 82: sugestoes.append("🔥 Over 1.5 Gols")
+    if p25 > 68: sugestoes.append("⚽ Over 2.5 Gols")
     
-    palpite_final = " / ".join(sugestoes) if sugestoes else "⚖️ Jogo equilibrado - Explorar live"
+    palpite_txt = " / ".join(sugestoes) if sugestoes else "⚖️ Mercado Equilibrado - Aguardar Live"
 
     st.markdown(f"""
         <div class='card-palpite'>
-            <p style='color:#ff00ff; font-weight:800; font-size:1.4rem; margin-bottom:10px;'>🎯 PALPITE ESTRATÉGICO</p>
-            <p style='color:white; font-size:1.3rem; font-weight:bold;'>{palpite_final}</p>
+            <p style='color:#ff00ff; font-weight:800; font-size:1.3rem;'>🎯 SUGESTÃO DE ENTRADA</p>
+            <p style='color:white; font-size:1.4rem; font-weight:bold;'>{palpite_txt}</p>
         </div>
     """, unsafe_allow_html=True)
 
-    if st.button("🗑️ NOVA PESQUISA"):
+    if st.button("🗑️ REINICIAR"):
         st.session_state.analise_pronta = False
         st.rerun()
