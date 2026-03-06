@@ -7,7 +7,7 @@ from datetime import datetime
 
 # ---------------- CONFIG ----------------
 
-API_KEY = "SUA_API_AQUI"
+API_KEY = "a19cf6b5fcmsh62790bdb0d293ddp131982jsn24158e88f703"
 HOST = "sportapi7.p.rapidapi.com"
 
 HEADERS = {
@@ -326,3 +326,4 @@ if jogos:
 else:
 
     st.warning("Nenhum jogo encontrado")
+
