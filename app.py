@@ -100,7 +100,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("⚽ PROBET EXPERT AI v12.0")
+st.title("PRO ANÁLISE ESPORTIVA")
 
 data_sel = st.date_input("📅 Data das Partidas", value=datetime.now())
 jogos = carregar_jogos(data_sel.strftime('%Y-%m-%d'))
@@ -190,4 +190,5 @@ if st.session_state.analise_pronta and st.session_state.jogo_selecionado:
     if st.button("🗑️ REINICIAR"):
         st.session_state.analise_pronta = False
         st.rerun()
+
 
