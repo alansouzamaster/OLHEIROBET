@@ -1,12 +1,10 @@
 import streamlit as st
 import requests
 import math
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # --- CONFIGURAÇÃO DA API ---
 API_KEY = "cd10359c14msheda9060d2cb34cep176fa8jsn3c42386ffb98"
-
-
 HOST = "sportapi7.p.rapidapi.com"
 HEADERS = {"X-RapidAPI-Key": API_KEY, "X-RapidAPI-Host": HOST}
 
@@ -15,7 +13,13 @@ if 'analise_pronta' not in st.session_state:
     st.session_state.analise_pronta = False
     st.session_state.jogo_selecionado = None
 
-# --- FUNÇÕES DE CÁLCULO ---
+# --- FUNÇÕES DE CÁLCULO E AJUSTE ---
+def ajustar_horario(timestamp):
+    # Converte UTC para Horário de Brasília (UTC-3)
+    dt_utc = datetime.fromtimestamp(timestamp)
+    dt_br = dt_utc - timedelta(hours=3)
+    return dt_br.strftime('%H:%M')
+
 def calcular_poisson(media, alvo):
     if media <= 0: return 0
     prob_acumulada = 0
@@ -63,21 +67,20 @@ def formatar_metric(label, prob):
     elif prob >= 50: cor = "#ffc107" # Amarelo
     estrela = "⭐" if prob >= 85 else ""
     return f"""
-    <div style='margin-bottom: 8px;'>
+    <div style='margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;'>
         <span style='color:#bbb; font-size:14px;'>{label}:</span> 
-        <span style='color:{cor}; font-weight:bold; font-size:18px;'>{prob:.1f}%</span> 
-        <span>{estrela}</span>
+        <span style='color:{cor}; font-weight:bold; font-size:18px;'>{prob:.1f}% {estrela}</span>
     </div>
     """
 
 # --- INTERFACE ---
-st.set_page_config(page_title="PROBET ANALISE v3.0", layout="wide", page_icon="⚽")
+st.set_page_config(page_title="PROBET ANALISE v3.1", layout="wide", page_icon="⚽")
 
 st.markdown("""
     <style>
     .stApp { background-color: #0e1117; color: #e0e0e0; }
     .res-box { text-align: center; padding: 15px; border-radius: 8px; font-weight: bold; color: white; margin-bottom: 10px; font-size: 20px; }
-    .metric-card { background-color: #1c2128; padding: 15px; border-radius: 10px; border: 1px solid #30363d; min-height: 100px; }
+    .metric-card { background-color: #1c2128; padding: 15px; border-radius: 10px; border: 1px solid #30363d; min-height: 80px; }
     h1, h2, h3 { color: #ffc107 !important; }
     </style>
     """, unsafe_allow_html=True)
@@ -104,7 +107,8 @@ if jogos:
     jogos_f = [j for j in jogos if j['tournament']['name'] in ligas_sel] if ligas_sel else jogos
     
     if jogos_f:
-        lista_nomes = {f"[{datetime.fromtimestamp(j.get('startTimestamp', 0)).strftime('%H:%M')}] {j['homeTeam']['name']} x {j['awayTeam']['name']}": j for j in jogos_f}
+        # Corrigindo horário na lista de seleção
+        lista_nomes = {f"[{ajustar_horario(j.get('startTimestamp', 0))}] {j['homeTeam']['name']} x {j['awayTeam']['name']}": j for j in jogos_f}
         escolha = st.selectbox("🎯 Escolha uma partida:", list(lista_nomes.keys()))
         
         if st.button("🔍 GERAR RELATÓRIO PREDITIVO"):
@@ -116,27 +120,22 @@ if st.session_state.analise_pronta and st.session_state.jogo_selecionado:
     jogo = st.session_state.jogo_selecionado
     st.divider()
     
-    # IDs e Logos (Caminho alternativo para os escudos)
-    id_casa = jogo['homeTeam']['id']
-    id_fora = jogo['awayTeam']['id']
-    logo_casa = f"https://www.sofascore.com/api/v1/team/{id_casa}/image"
-    logo_fora = f"https://www.sofascore.com/api/v1/team/{id_fora}/image"
-
     h_atq, h_def, a_atq, a_def = buscar_estatisticas_completas(
-        jogo['tournament']['id'], jogo['season']['id'], id_casa, id_fora
+        jogo['tournament']['id'], jogo['season']['id'], jogo['homeTeam']['id'], jogo['awayTeam']['id']
     )
     p_c, p_e, p_f, l_h, l_a = prever_1x2_avancado(h_atq, h_def, a_atq, a_def)
     m_total = l_h + l_a
+    hora_br = ajustar_horario(jogo.get('startTimestamp', 0))
 
     # Cabeçalho Visual com Logos
     col_l, col_m, col_r = st.columns([1, 3, 1])
     with col_l:
-        st.image(logo_casa, width=120)
+        st.image(f"https://www.sofascore.com/api/v1/team/{jogo['homeTeam']['id']}/image", width=120)
     with col_m:
         st.markdown(f"<h1 style='text-align: center;'>{jogo['homeTeam']['name']} vs {jogo['awayTeam']['name']}</h1>", unsafe_allow_html=True)
-        st.markdown(f"<p style='text-align: center; font-size: 18px;'>{jogo['tournament']['name']} • {datetime.fromtimestamp(jogo.get('startTimestamp', 0)).strftime('%H:%M')}</p>", unsafe_allow_html=True)
+        st.markdown(f"<p style='text-align: center; font-size: 18px;'>{jogo['tournament']['name']} • {hora_br} (Brasília)</p>", unsafe_allow_html=True)
     with col_r:
-        st.image(logo_fora, width=120)
+        st.image(f"https://www.sofascore.com/api/v1/team/{jogo['awayTeam']['id']}/image", width=120)
     
     # Vitórias 1X2
     st.write("")
@@ -145,34 +144,29 @@ if st.session_state.analise_pronta and st.session_state.jogo_selecionado:
     c2.markdown(f"<div class='res-box' style='background-color:#444;'>Empate: {p_e:.1f}%</div>", unsafe_allow_html=True)
     c3.markdown(f"<div class='res-box' style='background-color:#dc3545;'>Fora: {p_f:.1f}%</div>", unsafe_allow_html=True)
 
-    # Mercados Secundários (Gols, Cantos, Cartões)
+    # Mercados Secundários
     st.divider()
     m1, m2, m3 = st.columns(3)
     
     with m1:
         st.subheader("⚽ GOLS")
-        p15 = calcular_poisson(m_total, 1)
-        p25 = calcular_poisson(m_total, 2)
-        content_gols = formatar_metric('Over 1.5', p15) + formatar_metric('Over 2.5', p25)
+        content_gols = formatar_metric('Over 1.5', calcular_poisson(m_total, 1)) + \
+                       formatar_metric('Over 2.5', calcular_poisson(m_total, 2))
         st.markdown(f"<div class='metric-card'>{content_gols}</div>", unsafe_allow_html=True)
 
     with m2:
         st.subheader("🚩 CANTOS")
-        pc8 = calcular_poisson(9.6, 8) # Média padrão dinâmica
-        pc10 = calcular_poisson(9.6, 10)
-        content_cantos = formatar_metric('Over 8.5', pc8) + formatar_metric('Over 10.5', pc10)
+        content_cantos = formatar_metric('Over 8.5', calcular_poisson(9.6, 8)) + \
+                         formatar_metric('Over 10.5', calcular_poisson(9.6, 10))
         st.markdown(f"<div class='metric-card'>{content_cantos}</div>", unsafe_allow_html=True)
 
     with m3:
         st.subheader("🟨 CARTÕES")
-        p_card3 = calcular_poisson(4.3, 3)
-        p_card4 = calcular_poisson(4.3, 4)
-        content_cards = formatar_metric('Over 3.5', p_card3) + formatar_metric('Over 4.5', p_card4)
+        content_cards = formatar_metric('Over 3.5', calcular_poisson(4.3, 3)) + \
+                        formatar_metric('Over 4.5', calcular_poisson(4.3, 4))
         st.markdown(f"<div class='metric-card'>{content_cards}</div>", unsafe_allow_html=True)
 
-    st.caption("⭐ = Confiança Técnica Elevada | Baseado em Modelagem de Poisson e Performance Defensiva.")
+    st.caption("⭐ = Confiança Técnica Elevada | Baseado em Modelagem de Poisson.")
 
 elif not jogos:
     st.info("Nenhum jogo encontrado para a data selecionada.")
-
-
