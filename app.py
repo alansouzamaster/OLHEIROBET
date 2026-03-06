@@ -63,5 +63,33 @@ def buscar_cartoes_elenco(team_id, tournament_id, season_id):
             p_obj = p.get('player', {})
             p_id = p_obj.get('id')
             
-            # Busca estatísticas na temporada/liga específica
-            url_stats = f"https://{HOST}/api/v1/player/{p_id}/unique-tournament/{tournament_id}/season/{season_
+            # URL Corrigida aqui:
+            url_stats = f"https://{HOST}/api/v1/player/{p_id}/unique-tournament/{tournament_id}/season/{season_id}/statistics/overall"
+            res_s = requests.get(url_stats, headers=HEADERS, timeout=5)
+            
+            if res_s.status_code == 200:
+                s = res_s.json().get('statistics', {})
+                amarelos = s.get('yellowCards', 0)
+                jogos = s.get('appearances', 0)
+                if jogos > 0 and amarelos > 0:
+                    prob = (amarelos / jogos) * 100
+                    dados_elenco.append({
+                        "nome": p_obj.get('name'),
+                        "pos": p_obj.get('position', 'N/A'),
+                        "cards": amarelos,
+                        "jogos": jogos,
+                        "prob": round(min(prob, 99), 1)
+                    })
+        return sorted(dados_elenco, key=lambda x: x['prob'], reverse=True)
+    except: return []
+
+# --- INTERFACE ---
+st.set_page_config(page_title="PROBET ANALISE", layout="wide")
+
+# Inicialização para evitar NameError
+btn_analise = False
+jogo_selecionado = None
+
+st.title("⚽ PROBET ANALISE - ELENCO COMPLETO")
+
+data_sel = st.date_input("
