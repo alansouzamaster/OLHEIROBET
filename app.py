@@ -13,7 +13,7 @@ if 'analise_pronta' not in st.session_state:
     st.session_state.analise_pronta = False
     st.session_state.jogo_selecionado = None
 
-# --- FUNÇÕES ---
+# --- FUNÇÕES DE CÁLCULO ---
 def calcular_poisson(media, alvo):
     if media <= 0: return 0
     prob_acumulada = 0
@@ -23,19 +23,19 @@ def calcular_poisson(media, alvo):
     return (1 - prob_acumulada) * 100
 
 def get_color(prob):
-    if prob >= 70: return "#28a745" # Verde
-    if prob >= 50: return "#ffc107" # Amarelo
-    return "#dc3545" # Vermelho
+    if prob >= 70: return "#28a745"
+    if prob >= 50: return "#ffc107"
+    return "#dc3545"
 
 def prever_1x2_avancado(h_atq, h_def, a_atq, a_def):
-    lambda_casa = h_atq * a_def * 1.10 
-    lambda_fora = a_atq * h_def * 0.90 
-    total = lambda_casa + lambda_fora
+    l_casa = h_atq * a_def * 1.10 
+    l_fora = a_atq * h_def * 0.90 
+    total = l_casa + l_fora
     p_empate = 31.0 if total < 2.2 else 26.0
     sobra = 100 - p_empate
-    p_casa = sobra * (lambda_casa / total) if total > 0 else sobra / 2
-    p_fora = sobra * (lambda_fora / total) if total > 0 else sobra / 2
-    return p_casa, p_empate, p_fora, lambda_casa + lambda_fora
+    p_casa = sobra * (l_casa / total) if total > 0 else sobra / 2
+    p_fora = sobra * (l_fora / total) if total > 0 else sobra / 2
+    return p_casa, p_empate, p_fora, total
 
 @st.cache_data(ttl=86400)
 def buscar_estatisticas(t_id, s_id, h_id, a_id):
@@ -55,15 +55,16 @@ def buscar_estatisticas(t_id, s_id, h_id, a_id):
     return 1.4, 1.2, 1.1, 1.3
 
 # --- INTERFACE ---
-st.set_page_config(page_title="PROBET ANALISE v4.0", layout="wide")
+st.set_page_config(page_title="PROBET ANALISE v5.0", layout="wide", page_icon="⚽")
 
 st.markdown("""
     <style>
     .stApp { background-color: #0e1117; color: #e0e0e0; }
     .res-box { text-align: center; padding: 15px; border-radius: 8px; font-weight: bold; color: white; margin-bottom: 10px; font-size: 20px; }
-    .metric-container { background-color: #1c2128; padding: 20px; border-radius: 12px; border: 1px solid #30363d; margin-top: 10px; }
-    .metric-row { display: flex; justify-content: space-between; margin-bottom: 10px; align-items: center; }
-    .star { color: #ffc107; font-size: 14px; margin-left: 5px; }
+    .metric-container { background-color: #1c2128; padding: 15px; border-radius: 10px; border: 1px solid #30363d; margin-top: 5px; }
+    .metric-row { display: flex; justify-content: space-between; margin-bottom: 8px; align-items: center; border-bottom: 1px solid #2d333b; padding-bottom: 5px; }
+    .metric-row:last-child { border-bottom: none; }
+    .star-icon { color: #ffc107; font-weight: bold; margin-left: 5px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -100,7 +101,6 @@ if st.session_state.analise_pronta and st.session_state.jogo_selecionado:
     j = st.session_state.jogo_selecionado
     st.divider()
     
-    # Logos e Dados
     id_h, id_a = j['homeTeam']['id'], j['awayTeam']['id']
     logo_h = f"https://api.sofascore.app/api/v1/team/{id_h}/image"
     logo_a = f"https://api.sofascore.app/api/v1/team/{id_a}/image"
@@ -108,47 +108,41 @@ if st.session_state.analise_pronta and st.session_state.jogo_selecionado:
     h_atq, h_def, a_atq, a_def = buscar_estatisticas(j['tournament']['id'], j['season']['id'], id_h, id_a)
     p_c, p_e, p_f, m_t = prever_1x2_avancado(h_atq, h_def, a_atq, a_def)
 
-    # Cabeçalho
+    # Topo
     c_l1, c_mid, c_l2 = st.columns([1, 4, 1])
     with c_l1: st.image(logo_h, width=100)
     with c_mid:
-        st.markdown(f"<h1 style='text-align: center;'>{j['homeTeam']['name']} vs {j['awayTeam']['name']}</h1>", unsafe_allow_html=True)
-        st.markdown(f"<p style='text-align: center;'>{j['tournament']['name']} • {datetime.fromtimestamp(j.get('startTimestamp', 0)).strftime('%H:%M')}</p>", unsafe_allow_html=True)
+        st.markdown(f"<h1 style='text-align: center; color:#ffc107;'>{j['homeTeam']['name']} vs {j['awayTeam']['name']}</h1>", unsafe_allow_html=True)
+        st.markdown(f"<p style='text-align: center; font-size: 1.1rem;'>{j['tournament']['name']} • {datetime.fromtimestamp(j.get('startTimestamp', 0)).strftime('%H:%M')}</p>", unsafe_allow_html=True)
     with c_l2: st.image(logo_a, width=100)
 
-    # Probabilidades 1X2
-    st.write("")
+    # 1X2
     v1, v2, v3 = st.columns(3)
     v1.markdown(f"<div class='res-box' style='background-color:#1f77b4;'>Casa: {p_c:.1f}%</div>", unsafe_allow_html=True)
     v2.markdown(f"<div class='res-box' style='background-color:#444;'>Empate: {p_e:.1f}%</div>", unsafe_allow_html=True)
     v3.markdown(f"<div class='res-box' style='background-color:#dc3545;'>Fora: {p_f:.1f}%</div>", unsafe_allow_html=True)
 
-    # Métricas (Corrigido para evitar que o código apareça)
+    # Blocos de Métricas (Revisados)
     st.divider()
     m1, m2, m3 = st.columns(3)
 
-    def render_metric_block(title, metrics):
-        st.subheader(title)
-        html = "<div class='metric-container'>"
-        for label, prob in metrics:
-            color = get_color(prob)
-            star = "<span class='star'>⭐</span>" if prob >= 85 else ""
-            html += f"""
-                <div class='metric-row'>
-                    <span style='color:#bbb;'>{label}</span>
-                    <span style='color:{color}; font-weight:bold; font-size:20px;'>{prob:.1f}% {star}</span>
-                </div>"""
+    def criar_bloco_html(titulo, dados):
+        html = f"### {titulo}<div class='metric-container'>"
+        for label, val in dados:
+            cor = get_color(val)
+            estrela = "<span class='star-icon'>⭐</span>" if val >= 85 else ""
+            html += f"<div class='metric-row'><span style='color:#bbb;'>{label}</span><span style='color:{cor}; font-weight:bold; font-size:20px;'>{val:.1f}%{estrela}</span></div>"
         html += "</div>"
-        st.markdown(html, unsafe_allow_html=True)
+        return html
 
     with m1:
-        render_metric_block("⚽ GOLS", [("Over 1.5", calcular_poisson(m_t, 1)), ("Over 2.5", calcular_poisson(m_t, 2))])
+        st.markdown(criar_bloco_html("⚽ GOLS", [("Over 1.5", calcular_poisson(m_t, 1)), ("Over 2.5", calcular_poisson(m_t, 2))]), unsafe_allow_html=True)
     with m2:
-        render_metric_block("🚩 CANTOS", [("Over 8.5", calcular_poisson(9.5, 8)), ("Over 10.5", calcular_poisson(9.5, 10))])
+        st.markdown(criar_bloco_html("🚩 CANTOS", [("Over 8.5", calcular_poisson(9.5, 8)), ("Over 10.5", calcular_poisson(9.5, 10))]), unsafe_allow_html=True)
     with m3:
-        render_metric_block("🟨 CARTÕES", [("Over 3.5", calcular_poisson(4.2, 3)), ("Over 4.5", calcular_poisson(4.2, 4))])
+        st.markdown(criar_bloco_html("🟨 CARTÕES", [("Over 3.5", calcular_poisson(4.2, 3)), ("Over 4.5", calcular_poisson(4.2, 4))]), unsafe_allow_html=True)
 
-    st.caption("⭐ Alta Confiança (+85%) | Baseado em Performance Defensiva e Poisson.")
+    st.caption("⭐ Destaque de probabilidade acima de 85%. Modelo baseado em médias históricas e Poisson.")
 
 elif not jogos:
-    st.info("Nenhum jogo encontrado.")
+    st.info("Nenhum jogo encontrado para a data selecionada.")
