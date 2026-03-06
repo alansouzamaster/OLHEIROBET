@@ -15,7 +15,6 @@ def calcular_poisson(media, alvo):
     if media <= 0: return 0
     prob_acumulada = 0
     for i in range(int(alvo) + 1):
-        # Cálculo de probabilidade usando a distribuição de Poisson
         prob_i = (math.exp(-media) * (media**i)) / math.factorial(i)
         prob_acumulada += prob_i
     return (1 - prob_acumulada) * 100
@@ -40,13 +39,11 @@ def buscar_medias_reais(tournament_id, season_id, home_id, away_id):
             data = response.json()
             standings_list = data.get('standings', [])
             if not standings_list: return 1.5, 1.0
-            
             rows = standings_list[0].get('rows', [])
             m_casa, m_fora = 1.4, 1.1
             for row in rows:
                 t_id = row['team']['id']
-                jogos = row.get('matches', 1)
-                if jogos == 0: jogos = 1
+                jogos = row.get('matches', 1) or 1
                 if t_id == home_id: m_casa = row.get('scoresFor', 0)/jogos
                 if t_id == away_id: m_fora = row.get('scoresFor', 0)/jogos
             return round(m_casa, 2), round(m_fora, 2)
@@ -66,91 +63,93 @@ st.set_page_config(page_title="PROBET ANALISE", layout="wide", page_icon="⚽")
 
 st.markdown("""
     <style>
+    /* Estilização Geral */
     .stApp { background-color: #0e1117; color: #e0e0e0; }
-    div[data-testid="stMetricValue"] { color: #ffc107 !important; font-size: 24px !important; }
-    .stMetric { background-color: #1c2128; padding: 15px; border-radius: 12px; border: 1px solid #30363d; }
-    .oportunidade-card { background-color: #1c2128; padding: 15px; border-top: 3px solid #ffc107; border-radius: 8px; margin-bottom: 10px; min-height: 160px; }
-    .stButton>button { width: 100%; background-color: #ffc107 !important; color: black !important; font-weight: bold; border-radius: 8px; }
-    .res-box { text-align: center; padding: 12px; border-radius: 8px; font-weight: bold; color: white; margin-bottom: 10px; font-size: 18px; }
-    .horario-badge { background-color: #333; color: #ffc107; padding: 3px 10px; border-radius: 5px; font-weight: bold; }
-    .header-vs { text-align: center; color: #ffc107; font-size: 40px; font-weight: bold; margin-top: 10px; }
+    
+    /* Metrics Personalizados */
+    [data-testid="stMetricValue"] { color: #ffc107 !important; font-size: 28px !important; font-weight: 700 !important; }
+    .stMetric { background: linear-gradient(145deg, #1c2128, #161b22); padding: 20px; border-radius: 15px; border: 1px solid #30363d; box-shadow: 5px 5px 15px rgba(0,0,0,0.3); }
+    
+    /* Cards de Destaque */
+    .oportunidade-card { background-color: #1c2128; padding: 20px; border-left: 5px solid #ffc107; border-radius: 10px; margin-bottom: 15px; transition: transform 0.3s; }
+    .oportunidade-card:hover { transform: scale(1.02); background-color: #24292e; }
+    
+    /* Botões */
+    .stButton>button { width: 100%; background: linear-gradient(90deg, #ffc107, #ff9800) !important; color: black !important; font-weight: bold; border: none; padding: 12px; border-radius: 10px; text-transform: uppercase; }
+    
+    /* Badges e Textos */
+    .horario-badge { background-color: #ffc107; color: #000; padding: 5px 12px; border-radius: 20px; font-weight: 800; font-size: 14px; }
+    .header-vs { text-align: center; color: #ffc107; font-size: 50px; font-weight: 900; letter-spacing: -2px; }
+    .team-title { font-size: 32px; font-weight: 700; color: #ffffff; margin-bottom: 5px; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title(" ⚽ PROBET ANALISE ")
+# Título com ícone centralizado
+st.markdown("<h1 style='text-align: center; color: #ffc107;'>⚽ PROBET ANALISE PRO</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #888;'>Inteligência Preditiva para Futebol Profissional</p>", unsafe_allow_html=True)
 st.markdown("---")
 
-# --- FILTROS DE BUSCA (ESTRUTURA VERTICAL) ---
-st.markdown("### 🛠️ CONFIGURAÇÃO DA ANÁLISE")
-container_filtros = st.container()
+# --- FILTROS DE BUSCA ---
+with st.sidebar:
+    st.image("https://cdn-icons-png.flaticon.com/512/53/53283.png", width=100)
+    st.markdown("### ⚙️ PARÂMETROS")
+    data_sel = st.date_input("📅 Data das Partidas", value=datetime.now(), format="DD/MM/YYYY")
+    
+    @st.cache_data(ttl=3600)
+    def carregar_jogos(data_str):
+        try:
+            url = f"https://{HOST}/api/v1/sport/football/scheduled-events/{data_str}"
+            response = requests.get(url, headers=HEADERS, timeout=12)
+            if response.status_code == 200:
+                return response.json().get('events', [])
+            return []
+        except Exception:
+            return []
 
-with container_filtros:
-    data_sel = st.date_input("📅 1. Data das Partidas", value=datetime.now(), format="DD/MM/YYYY")
+    jogos = carregar_jogos(data_sel.strftime('%Y-%m-%d'))
 
-@st.cache_data(ttl=3600)
-def carregar_jogos(data_str):
-    try:
-        url = f"https://{HOST}/api/v1/sport/football/scheduled-events/{data_str}"
-        response = requests.get(url, headers=HEADERS, timeout=12)
-        if response.status_code == 200:
-            return response.json().get('events', [])
-        return []
-    except Exception:
-        return []
-
-jogos = carregar_jogos(data_sel.strftime('%Y-%m-%d'))
-
-# Inicialização segura para evitar erro de referência
 btn_analise = False
 
 if jogos:
     todas_ligas = sorted(list(set([j['tournament']['name'] for j in jogos])))
     
-    with container_filtros:
-        # Seleção de Ligas abaixo da data
-        ligas_sel = st.multiselect("🏆 2. Selecione as Ligas", todas_ligas)
+    with st.container():
+        c_filt1, c_filt2 = st.columns(2)
+        with c_filt1:
+            ligas_sel = st.multiselect("🏆 Selecione as Ligas", todas_ligas)
         
-        # Filtra os jogos com base na liga selecionada
         jogos_f = [j for j in jogos if j['tournament']['name'] in ligas_sel] if ligas_sel else jogos
         
-        if jogos_f:
-            # Seleção de Partida abaixo das ligas
-            lista_nomes = {f"[{formatar_hora(j.get('startTimestamp'))}] {j['homeTeam']['name']} x {j['awayTeam']['name']}": j for j in jogos_f}
-            escolha = st.selectbox("🎯 3. Escolha uma partida para analisar:", list(lista_nomes.keys()))
-            jogo_selecionado = lista_nomes[escolha]
-            
-            # Botão de ação (corrigido aqui)
-            btn_analise = st.button("🔍 GERAR RELATÓRIO PREDITIVO COMPLETO")
-        else:
-            st.info("💡 Nenhuma partida encontrada para os critérios selecionados.")
+        with c_filt2:
+            if jogos_f:
+                lista_nomes = {f"[{formatar_hora(j.get('startTimestamp'))}] {j['homeTeam']['name']} x {j['awayTeam']['name']}": j for j in jogos_f}
+                escolha = st.selectbox("🎯 Escolha a partida:", list(lista_nomes.keys()))
+                jogo_selecionado = lista_nomes[escolha]
+                btn_analise = st.button("🔍 GERAR RELATÓRIO COMPLETO")
 
-    # --- EXIBIÇÃO DE DESTAQUES (APARECE SE NÃO HOUVER ANÁLISE ATIVA) ---
     if not btn_analise:
-        st.write("---")
-        st.subheader(f"🔥 Destaques para {formatar_data_br(data_sel)}")
+        st.markdown(f"### 🔥 Destaques de Hoje - {formatar_data_br(data_sel)}")
         random.seed(data_sel.toordinal())
-        quentes = [j for j in jogos if random.random() > 0.90][:4]
+        quentes = [j for j in jogos if random.random() > 0.92][:4]
         
         if quentes:
             cols_q = st.columns(len(quentes))
             for i, q in enumerate(quentes):
                 with cols_q[i]:
                     hora_q = formatar_hora(q.get('startTimestamp'))
-                    nome_h = q['homeTeam'].get('shortName', q['homeTeam'].get('name'))
-                    nome_a = q['awayTeam'].get('shortName', q['awayTeam'].get('name'))
                     st.markdown(f"""
-                    <div class='oportunidade-card'>
-                        <span class='horario-badge'>🕒 {hora_q}</span><br>
-                        <small style='color:#888;'>{q['tournament']['name']}</small><br>
-                        <strong>{nome_h} x {nome_a}</strong><br>
-                        <span style='color:#ffc107;'>Over 2.5: {random.randint(72, 89)}%</span>
-                    </div>
+                        <div class='oportunidade-card'>
+                            <span class='horario-badge'>{hora_q}</span><br><br>
+                            <small style='color:#ffc107;'>{q['tournament']['name']}</small><br>
+                            <strong>{q['homeTeam']['shortName']} x {q['awayTeam']['shortName']}</strong><br>
+                            <hr style='margin:10px 0; border:0.5px solid #333'>
+                            <span style='font-size: 12px; color:#888;'>Sugestão:</span><br>
+                            <span style='color:#00ff88; font-weight:bold;'>OVER 2.5 ({random.randint(70, 88)}%)</span>
+                        </div>
                     """, unsafe_allow_html=True)
 
-    # --- RESULTADO DA ANÁLISE ---
     if btn_analise:
-        st.write("---")
-        with st.spinner('Acessando dados históricos e calculando probabilidades...'):
+        with st.spinner('🔬 Analisando Big Data...'):
             m_h, m_a = buscar_medias_reais(
                 jogo_selecionado['tournament']['id'], 
                 jogo_selecionado['season']['id'], 
@@ -160,37 +159,9 @@ if jogos:
             m_total = m_h + m_a
             p_c, p_e, p_f = prever_1x2(m_h, m_a)
 
-        # Cabeçalho do Confronto
-        hora_f = formatar_hora(jogo_selecionado.get('startTimestamp'))
-        st.markdown(f"<div style='text-align:center;'><span class='horario-badge'>INÍCIO ÀS {hora_f} - {formatar_data_br(data_sel)}</span></div>", unsafe_allow_html=True)
+        # Dashboard de Resultado
+        st.markdown("<br>", unsafe_allow_html=True)
+        col_main1, col_main2, col_main3 = st.columns([2, 1, 2])
         
-        c1, c_vs, c2 = st.columns([2, 1, 2])
-        with c1: 
-            st.markdown(f"<h2 style='text-align:center;'>{jogo_selecionado['homeTeam']['name']}</h2><p style='text-align:center; color:#28a745;'>Média Gols: {m_h:.2f}</p>", unsafe_allow_html=True)
-        with c_vs: 
-            st.markdown("<div class='header-vs'>VS</div>", unsafe_allow_html=True)
-        with c2: 
-            st.markdown(f"<h2 style='text-align:center;'>{jogo_selecionado['awayTeam']['name']}</h2><p style='text-align:center; color:#28a745;'>Média Gols: {m_a:.2f}</p>", unsafe_allow_html=True)
-
-        st.markdown("### 📊 Probabilidades Vitória (1X2)")
-        r1, r2, r3 = st.columns(3)
-        r1.markdown(f"<div class='res-box' style='background-color:#1f77b4;'>Casa: {p_c:.1f}%</div>", unsafe_allow_html=True)
-        r2.markdown(f"<div class='res-box' style='background-color:#444;'>Empate: {p_e:.1f}%</div>", unsafe_allow_html=True)
-        r3.markdown(f"<div class='res-box' style='background-color:#dc3545;'>Fora: {p_f:.1f}%</div>", unsafe_allow_html=True)
-
-        st.markdown("---")
-        m1, m2, m3 = st.columns(3)
-        with m1:
-            st.markdown("#### ⚽ GOLS")
-            st.metric("Over 1.5", f"{calcular_poisson(m_total, 1):.1f}%")
-            st.metric("Over 2.5", f"{calcular_poisson(m_total, 2):.1f}%")
-        with m2:
-            st.markdown("#### 🚩 CANTOS")
-            st.metric("Over 8.5", f"{calcular_poisson(9.5, 8):.1f}%")
-            st.metric("Over 10.5", f"{calcular_poisson(9.5, 10):.1f}%")
-        with m3:
-            st.markdown("#### 🟨 CARTÕES")
-            st.metric("Over 3.5", f"{calcular_poisson(4.2, 3):.1f}%")
-            st.info(f"⚖️ Juiz: {jogo_selecionado.get('referee', {}).get('name', 'Pendente')}")
-else:
-    st.warning(f"⚠️ Nenhum jogo disponível para {formatar_data_br(data_sel)}.")
+        with col_main1:
+            st.markdown(f"<p style='text-align:center;' class='team-title'>{jogo_selecionado['homeTeam']['name']}</p>",
