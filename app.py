@@ -15,7 +15,6 @@ if 'analise_pronta' not in st.session_state:
 
 # --- FUNÇÕES DE APOIO ---
 def ajustar_horario(timestamp):
-    """Converte UTC para Horário de Brasília (UTC-3)"""
     dt_utc = datetime.fromtimestamp(timestamp)
     dt_br = dt_utc - timedelta(hours=3)
     return dt_br.strftime('%H:%M')
@@ -64,53 +63,64 @@ def buscar_stats(t_id, s_id, h_id, a_id):
     return 1.4, 1.2, 1.1, 1.3
 
 def formatar_metric(label, prob):
-    """Gera o HTML para as barras de progresso nos cards"""
+    """Gera o HTML para as barras com efeito Glow acima de 80%"""
     cor = "#28a745" if prob >= 75 else ("#ffc107" if prob >= 50 else "#dc3545")
+    glow = f"box-shadow: 0 0 15px {cor};" if prob >= 80 else ""
     estrela = "⭐" if prob >= 85 else ""
+    
     return f"""
-    <div style='margin-bottom: 15px;'>
+    <div style='margin-bottom: 18px;'>
         <div style='display: flex; justify-content: space-between; margin-bottom: 5px;'>
             <span style='color: #bbb; font-size: 13px; font-weight: 500;'>{label}</span>
             <span style='color: {cor}; font-weight: bold; font-size: 15px;'>{prob:.1f}% {estrela}</span>
         </div>
-        <div style='background-color: #2d333b; border-radius: 10px; height: 6px; width: 100%;'>
-            <div style='background-color: {cor}; width: {prob}%; height: 100%; border-radius: 10px; box-shadow: 0 0 8px {cor}66;'></div>
+        <div style='background-color: #2d333b; border-radius: 10px; height: 8px; width: 100%;'>
+            <div style='background-color: {cor}; width: {prob}%; height: 100%; border-radius: 10px; {glow} transition: width 1s ease-in-out;'></div>
         </div>
     </div>
     """
 
 # --- INTERFACE (CONFIG E CSS) ---
-st.set_page_config(page_title="PROBET v5.0", layout="wide")
+st.set_page_config(page_title="PROBET v5.5", layout="wide")
 
 st.markdown("""
     <style>
-    .stApp { background-color: #0e1117; color: white; }
-    .res-box { text-align: center; padding: 15px; border-radius: 8px; font-weight: bold; color: white; margin-bottom: 10px; font-size: 20px; }
-    .metric-card {
-        background: linear-gradient(145deg, #1c2128, #161b22);
-        padding: 20px;
-        border-radius: 15px;
-        border: 1px solid #30363d;
-        box-shadow: 5px 5px 15px rgba(0,0,0,0.3);
+    .stApp { background-color: #0b0e11; color: white; }
+    
+    .res-box { 
+        text-align: center; padding: 15px; border-radius: 12px; 
+        font-weight: bold; color: white; margin-bottom: 10px; font-size: 20px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
     }
+
+    /* Cards Estilizados */
+    .card-gols {
+        background: linear-gradient(145deg, #16222e, #0f171f);
+        padding: 22px; border-radius: 15px; border: 1px solid #1e3a5f;
+    }
+    .card-cantos {
+        background: linear-gradient(145deg, #162e21, #0f1f16);
+        padding: 22px; border-radius: 15px; border: 1px solid #1e5f3a;
+    }
+    .card-cards {
+        background: linear-gradient(145deg, #2e2616, #1f1a0f);
+        padding: 22px; border-radius: 15px; border: 1px solid #5f4d1e;
+    }
+
     .section-header {
-        font-size: 18px;
-        font-weight: bold;
-        color: #ffc107;
-        margin-bottom: 15px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
+        font-size: 16px; font-weight: bold; color: #ffc107;
+        margin-bottom: 15px; text-align: center; text-transform: uppercase;
+        letter-spacing: 1.5px;
     }
-    h1 { color: #ffc107 !important; text-align: center; }
+    
+    h1 { color: #ffc107 !important; text-align: center; font-weight: 800; }
     </style>
     """, unsafe_allow_html=True)
 
 st.title("⚽ PROBET ANALISE")
 
 # --- FILTROS ---
-data_sel = st.date_input("📅 Data das Partidas", value=datetime.now())
+data_sel = st.sidebar.date_input("📅 Data das Partidas", value=datetime.now())
 data_str = data_sel.strftime('%Y-%m-%d')
 
 jogos = carregar_jogos(data_str)
@@ -133,14 +143,13 @@ if st.session_state.analise_pronta and st.session_state.jogo_selecionado:
     j = st.session_state.jogo_selecionado
     st.divider()
     
-    # Busca de dados reais
+    # Processamento
     h_atq, h_def, a_atq, a_def = buscar_stats(j['tournament']['id'], j['season']['id'], j['homeTeam']['id'], j['awayTeam']['id'])
     p_c, p_e, p_f, m_total = prever_1x2_avancado(h_atq, h_def, a_atq, a_def)
-    hora_br = ajustar_horario(j.get('startTimestamp', 0))
 
     # Cabeçalho
-    st.markdown(f"<h1>{j['homeTeam']['name']} <span style='color:#555; font-size:25px;'>VS</span> {j['awayTeam']['name']}</h1>", unsafe_allow_html=True)
-    st.markdown(f"<p style='text-align: center; color: #888;'>{j['tournament']['name']} • {hora_br} (Brasília)</p>", unsafe_allow_html=True)
+    st.markdown(f"<h1>{j['homeTeam']['name']} <span style='color:#444; font-size:25px;'>VS</span> {j['awayTeam']['name']}</h1>", unsafe_allow_html=True)
+    st.markdown(f"<p style='text-align: center; color: #888;'>{j['tournament']['name']} • {ajustar_horario(j.get('startTimestamp', 0))} (Brasília)</p>", unsafe_allow_html=True)
 
     # Probabilidades 1X2
     st.write("### 📊 Probabilidades 1X2")
@@ -151,34 +160,30 @@ if st.session_state.analise_pronta and st.session_state.jogo_selecionado:
 
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # Cards de Mercados (2 métricas por card)
+    # Cards de Mercados
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.markdown("<div class='section-header'>⚽ GOLS</div>", unsafe_allow_html=True)
+        st.markdown("<div class='section-header'>⚽ Gols</div>", unsafe_allow_html=True)
         html = formatar_metric("OVER 1.5 GOLS", calcular_poisson(m_total, 1))
         html += formatar_metric("OVER 2.5 GOLS", calcular_poisson(m_total, 2))
-        st.markdown(f"<div class='metric-card'>{html}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='card-gols'>{html}</div>", unsafe_allow_html=True)
 
     with col2:
-        st.markdown("<div class='section-header'>🚩 CANTOS</div>", unsafe_allow_html=True)
+        st.markdown("<div class='section-header'>🚩 Cantos</div>", unsafe_allow_html=True)
         html = formatar_metric("OVER 8.5 CANTOS", calcular_poisson(9.5, 8))
         html += formatar_metric("OVER 10.5 CANTOS", calcular_poisson(9.5, 10))
-        st.markdown(f"<div class='metric-card'>{html}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='card-cantos'>{html}</div>", unsafe_allow_html=True)
 
     with col3:
-        st.markdown("<div class='section-header'>🟨 CARTÕES</div>", unsafe_allow_html=True)
+        st.markdown("<div class='section-header'>🟨 Cartões</div>", unsafe_allow_html=True)
         html = formatar_metric("OVER 3.5 CARTÕES", calcular_poisson(4.2, 3))
         html += formatar_metric("OVER 4.5 CARTÕES", calcular_poisson(4.2, 4))
-        st.markdown(f"<div class='metric-card'>{html}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='card-cards'>{html}</div>", unsafe_allow_html=True)
 
-    st.caption("ℹ️ Dados baseados em médias históricas da temporada atual.")
-
-elif not jogos:
-    st.info("Nenhum jogo encontrado para a data selecionada.")
-
-# --- BOTÃO LIMPAR NO FINAL ---
-if st.session_state.analise_pronta:
-    if st.button("🗑️ LIMPAR ANÁLISE"):
+    if st.button("🗑️ LIMPAR"):
         st.session_state.analise_pronta = False
         st.rerun()
+
+elif not jogos:
+    st.info("Aguardando seleção de liga ou nenhum jogo disponível.")
