@@ -9,8 +9,8 @@ HOST = "sportapi7.p.rapidapi.com"
 HEADERS = {"X-RapidAPI-Key": API_KEY, "X-RapidAPI-Host": HOST}
 
 # --- 1. INICIALIZAÇÃO ---
-btn_analise = False
-jogo_selecionado = None
+if 'analise_pronta' not in st.session_state:
+    st.session_state.analise_pronta = False
 
 # --- FUNÇÕES DE CÁLCULO ---
 def calcular_poisson(media, alvo):
@@ -22,15 +22,11 @@ def calcular_poisson(media, alvo):
     return (1 - prob_acumulada) * 100
 
 def prever_1x2_avancado(h_atq, h_def, a_atq, a_def):
-    # Cruzamento de dados com fator mando de campo
     lambda_casa = h_atq * a_def * 1.10 
     lambda_fora = a_atq * h_def * 0.90 
     total = lambda_casa + lambda_fora
-    
-    # Empate dinâmico baseado na expectativa de gols
     p_empate = 31.0 if total < 2.2 else 26.0
     sobra = 100 - p_empate
-    
     p_casa = sobra * (lambda_casa / total) if total > 0 else sobra / 2
     p_fora = sobra * (lambda_fora / total) if total > 0 else sobra / 2
     return p_casa, p_empate, p_fora, lambda_casa, lambda_fora
@@ -41,7 +37,9 @@ def buscar_estatisticas_completas(tournament_id, season_id, home_id, away_id):
         url = f"https://{HOST}/api/v1/tournament/{tournament_id}/season/{season_id}/standings/total"
         res = requests.get(url, headers=HEADERS, timeout=12)
         if res.status_code == 200:
-            rows = res.json().get('standings', [{}])[0].get('rows', [])
+            data = res.json().get('standings', [{}])
+            if not data: return 1.4, 1.2, 1.1, 1.3
+            rows = data[0].get('rows', [])
             h_atq, h_def, a_atq, a_def = 1.4, 1.2, 1.1, 1.3
             for row in rows:
                 t_id = row['team']['id']
@@ -57,15 +55,14 @@ def buscar_estatisticas_completas(tournament_id, season_id, home_id, away_id):
 st.set_page_config(page_title="PROBET ANALISE", layout="wide")
 st.title("⚽ PROBET ANALISE")
 
-# Seleção de Data
 data_sel = st.date_input("Selecione a Data", value=datetime.now())
 data_str = data_sel.strftime('%Y-%m-%d')
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=600) # Cache menor para evitar o erro da imagem 2
 def carregar_jogos(d):
     try:
         url = f"https://{HOST}/api/v1/sport/football/scheduled-events/{d}"
-        res = requests.get(url, headers=HEADERS)
+        res = requests.get(url, headers=HEADERS, timeout=10)
         return res.json().get('events', []) if res.status_code == 200 else []
     except: return []
 
@@ -81,13 +78,15 @@ if jogos:
         lista_nomes = {f"{j['homeTeam']['name']} x {j['awayTeam']['name']}": j for j in jogos_f}
         escolha = st.selectbox("Escolha a partida", list(lista_nomes.keys()))
         jogo_selecionado = lista_nomes[escolha]
-        btn_analise = st.button("ANALISAR PARTIDA")
+        
+        if st.button("ANALISAR PARTIDA"):
+            st.session_state.analise_pronta = True
+            st.session_state.jogo_id = jogo_selecionado['id']
 
-# --- BLOCO DE RESULTADOS ---
-if btn_analise and jogo_selecionado:
+# --- BLOCO DE RESULTADOS (FORA DO IF DE BOTÃO PARA PERSISTIR) ---
+if st.session_state.analise_pronta and 'jogo_selecionado' in locals():
     st.divider()
     
-    # Cálculo das estatísticas
     h_atq, h_def, a_atq, a_def = buscar_estatisticas_completas(
         jogo_selecionado['tournament']['id'], 
         jogo_selecionado['season']['id'], 
@@ -98,29 +97,23 @@ if btn_analise and jogo_selecionado:
     p_c, p_e, p_f, lamb_h, lamb_a = prever_1x2_avancado(h_atq, h_def, a_atq, a_def)
     m_total = lamb_h + lamb_a
 
-    # Exibição de Probabilidades Principais
-    st.subheader(f"📊 Probabilidades: {p_c:.1f}% (Casa) | {p_e:.1f}% (Empate) | {p_f:.1f}% (Fora)")
+    st.subheader(f"📊 Probabilidades: {p_c:.1f}% | {p_e:.1f}% | {p_f:.1f}%")
     
-    # Colunas de Métricas
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown("#### ⚽ GOLS")
+    # ORGANIZAÇÃO EM COLUNAS PARA NÃO SUMIR
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.info("⚽ GOLS")
         st.metric("Over 1.5", f"{calcular_poisson(m_total, 1):.1f}%")
         st.metric("Over 2.5", f"{calcular_poisson(m_total, 2):.1f}%")
-        
-    with col2:
-        st.markdown("#### 🚩 CANTOS (Escanteios)")
+    with c2:
+        st.info("🚩 CANTOS")
         st.metric("Over 8.5", f"{calcular_poisson(9.5, 8):.1f}%")
         st.metric("Over 10.5", f"{calcular_poisson(9.5, 10):.1f}%")
-        
-    with col3:
-        st.markdown("#### 🟨 CARTÕES")
+    with c3:
+        st.info("🟨 CARTÕES")
         st.metric("Over 3.5", f"{calcular_poisson(4.2, 3):.1f}%")
         st.metric("Over 4.5", f"{calcular_poisson(4.2, 4):.1f}%")
 
-    st.divider()
-    st.caption(f"Análise baseada no desempenho histórico de ataque ({h_atq:.2f} vs {a_atq:.2f}) e defesa ({h_def:.2f} vs {a_def:.2f}) das equipes.")
 else:
     if not jogos:
-        st.info("Nenhum jogo encontrado para a data selecionada.")
+        st.warning("Nenhum jogo encontrado para a data selecionada. Verifique se a data está correta ou tente novamente em instantes.")
