@@ -61,26 +61,25 @@ def formatar_metric(label, prob):
     elif prob >= 50: cor = "#ffc107" # Amarelo
     estrela = "⭐" if prob >= 85 else ""
     return f"""
-    <div style='margin-bottom: 8px;'>
-        <span style='color:#bbb; font-size:14px;'>{label}:</span> 
+    <div style='margin-bottom: 10px;'>
+        <span style='color:#bbb;'>{label}:</span> 
         <span style='color:{cor}; font-weight:bold; font-size:18px;'>{prob:.1f}%</span> 
-        <span>{estrela}</span>
+        <span style='font-size:14px;'>{estrela}</span>
     </div>
     """
 
 # --- INTERFACE ---
-st.set_page_config(page_title="PROBET ANALISE v3.0", layout="wide", page_icon="⚽")
+st.set_page_config(page_title="PROBET ANALISE v2.0", layout="wide", page_icon="⚽")
 
 st.markdown("""
     <style>
     .stApp { background-color: #0e1117; color: #e0e0e0; }
     .res-box { text-align: center; padding: 15px; border-radius: 8px; font-weight: bold; color: white; margin-bottom: 10px; font-size: 20px; }
-    .metric-card { background-color: #1c2128; padding: 15px; border-radius: 10px; border: 1px solid #30363d; min-height: 100px; }
-    h1, h2, h3 { color: #ffc107 !important; }
+    .metric-card { background-color: #1c2128; padding: 15px; border-radius: 10px; border: 1px solid #30363d; min-height: 120px; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("⚽ PROBET ANALISE")
+st.title(" ⚽ PROBET ANALISE ")
 
 # --- FILTROS ---
 data_sel = st.date_input("📅 Data das Partidas", value=datetime.now())
@@ -114,11 +113,11 @@ if st.session_state.analise_pronta and st.session_state.jogo_selecionado:
     jogo = st.session_state.jogo_selecionado
     st.divider()
     
-    # IDs e Logos (Caminho alternativo para os escudos)
+    # IDs e Logos
     id_casa = jogo['homeTeam']['id']
     id_fora = jogo['awayTeam']['id']
-    logo_casa = f"https://www.sofascore.com/api/v1/team/{id_casa}/image"
-    logo_fora = f"https://www.sofascore.com/api/v1/team/{id_fora}/image"
+    logo_casa = f"https://api.sofascore.app/api/v1/team/{id_casa}/image"
+    logo_fora = f"https://api.sofascore.app/api/v1/team/{id_fora}/image"
 
     h_atq, h_def, a_atq, a_def = buscar_estatisticas_completas(
         jogo['tournament']['id'], jogo['season']['id'], id_casa, id_fora
@@ -126,49 +125,45 @@ if st.session_state.analise_pronta and st.session_state.jogo_selecionado:
     p_c, p_e, p_f, l_h, l_a = prever_1x2_avancado(h_atq, h_def, a_atq, a_def)
     m_total = l_h + l_a
 
-    # Cabeçalho Visual com Logos
-    col_l, col_m, col_r = st.columns([1, 3, 1])
-    with col_l:
-        st.image(logo_casa, width=120)
-    with col_m:
+    # Cabeçalho Visual
+    col_l1, col_mid, col_l2 = st.columns([1, 4, 1])
+    with col_l1:
+        st.image(logo_casa, width=100)
+    with col_mid:
         st.markdown(f"<h1 style='text-align: center;'>{jogo['homeTeam']['name']} vs {jogo['awayTeam']['name']}</h1>", unsafe_allow_html=True)
-        st.markdown(f"<p style='text-align: center; font-size: 18px;'>{jogo['tournament']['name']} • {datetime.fromtimestamp(jogo.get('startTimestamp', 0)).strftime('%H:%M')}</p>", unsafe_allow_html=True)
-    with col_r:
-        st.image(logo_fora, width=120)
+        st.markdown(f"<p style='text-align: center; color: #888;'>{jogo['tournament']['name']} • {datetime.fromtimestamp(jogo.get('startTimestamp', 0)).strftime('%d/%m/%Y %H:%M')}</p>", unsafe_allow_html=True)
+    with col_l2:
+        st.image(logo_fora, width=100)
     
-    # Vitórias 1X2
-    st.write("")
+    # Probabilidades de Vitória
     c1, c2, c3 = st.columns(3)
     c1.markdown(f"<div class='res-box' style='background-color:#1f77b4;'>Casa: {p_c:.1f}%</div>", unsafe_allow_html=True)
     c2.markdown(f"<div class='res-box' style='background-color:#444;'>Empate: {p_e:.1f}%</div>", unsafe_allow_html=True)
     c3.markdown(f"<div class='res-box' style='background-color:#dc3545;'>Fora: {p_f:.1f}%</div>", unsafe_allow_html=True)
 
-    # Mercados Secundários (Gols, Cantos, Cartões)
-    st.divider()
+    # Mercados Secundários
+    st.write("---")
     m1, m2, m3 = st.columns(3)
     
     with m1:
-        st.subheader("⚽ GOLS")
-        p15 = calcular_poisson(m_total, 1)
-        p25 = calcular_poisson(m_total, 2)
-        content_gols = formatar_metric('Over 1.5', p15) + formatar_metric('Over 2.5', p25)
-        st.markdown(f"<div class='metric-card'>{content_gols}</div>", unsafe_allow_html=True)
+        st.info("⚽ GOLS")
+        html_gols = formatar_metric('Over 1.5', calcular_poisson(m_total, 1)) + \
+                    formatar_metric('Over 2.5', calcular_poisson(m_total, 2))
+        st.markdown(f"<div class='metric-card'>{html_gols}</div>", unsafe_allow_html=True)
 
     with m2:
-        st.subheader("🚩 CANTOS")
-        pc8 = calcular_poisson(9.6, 8) # Média padrão dinâmica
-        pc10 = calcular_poisson(9.6, 10)
-        content_cantos = formatar_metric('Over 8.5', pc8) + formatar_metric('Over 10.5', pc10)
-        st.markdown(f"<div class='metric-card'>{content_cantos}</div>", unsafe_allow_html=True)
+        st.info("🚩 CANTOS")
+        html_cantos = formatar_metric('Over 8.5', calcular_poisson(9.5, 8)) + \
+                      formatar_metric('Over 10.5', calcular_poisson(9.5, 10))
+        st.markdown(f"<div class='metric-card'>{html_cantos}</div>", unsafe_allow_html=True)
 
     with m3:
-        st.subheader("🟨 CARTÕES")
-        p_card3 = calcular_poisson(4.3, 3)
-        p_card4 = calcular_poisson(4.3, 4)
-        content_cards = formatar_metric('Over 3.5', p_card3) + formatar_metric('Over 4.5', p_card4)
-        st.markdown(f"<div class='metric-card'>{content_cards}</div>", unsafe_allow_html=True)
+        st.info("🟨 CARTÕES")
+        html_cards = formatar_metric('Over 3.5', calcular_poisson(4.2, 3)) + \
+                     formatar_metric('Over 4.5', calcular_poisson(4.2, 4))
+        st.markdown(f"<div class='metric-card'>{html_cards}</div>", unsafe_allow_html=True)
 
-    st.caption("⭐ = Confiança Técnica Elevada | Baseado em Modelagem de Poisson e Performance Defensiva.")
+    st.caption("⭐ = Alta Confiança (+85%) | Modelo: Força de Ataque vs Fragilidade Defensiva")
 
 elif not jogos:
-    st.info("Nenhum jogo encontrado para a data selecionada.")
+    st.warning("Nenhum jogo disponível para esta data.")
