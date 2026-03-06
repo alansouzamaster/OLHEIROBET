@@ -12,7 +12,8 @@ from datetime import datetime, timedelta
 
 # --- CONFIGURAÇÃO DA API ---
 
-API_KEY = "a19cf6b5fcmsh62790bdb0d293ddp131982jsn24158e88f703"
+API_KEY = "3a5c2b926bmsh18b3c4624ec302bp1911efjsn84e2922978ff"
+
 
 HOST = "sportapi7.p.rapidapi.com"
 
@@ -243,3 +244,4 @@ if jogos:
 else:
 
     st.error("Sem jogos disponíveis para esta data.")
+
