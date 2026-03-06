@@ -164,4 +164,5 @@ if jogos:
         col_main1, col_main2, col_main3 = st.columns([2, 1, 2])
         
         with col_main1:
-            st.markdown(f"<p style='text-align:center;' class='team-title'>{jogo_selecionado['homeTeam']['name']}</p>",
+            st.markdown(f"<p style='text-align:center;' class='team-title'>{jogo_selecionado['homeTeam']['name']}</p>",)
+
