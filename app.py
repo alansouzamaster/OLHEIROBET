@@ -1,13 +1,34 @@
+import streamlit as st
+import requests
 import math
+from datetime import datetime
+
+# =========================
+# CONFIGURAÇÃO API
+# =========================
+
+API_KEY = "SUA_API_KEY_AQUI"
+HOST = "sportapi7.p.rapidapi.com"
+
+HEADERS = {
+    "X-RapidAPI-Key": API_KEY,
+    "X-RapidAPI-Host": HOST
+}
+
+# =========================
+# MODELO MATEMÁTICO
+# =========================
 
 def poisson_prob(media, k):
     return (math.exp(-media) * media**k) / math.factorial(k)
+
 
 def prob_over(media, linha):
 
     linha_int = int(linha)
 
     prob = 0
+
     for i in range(linha_int + 1):
         prob += poisson_prob(media, i)
 
@@ -75,72 +96,84 @@ def placares_provaveis(lambda_home, lambda_away):
     top = sorted(resultados.items(), key=lambda x: x[1], reverse=True)
 
     return top[:5]
-import requests
 
-API_KEY = "e0b5f00182mshfd230164523fd40p120ad6jsn5604e643008f"
+# =========================
+# API DE DADOS
+# =========================
 
-HOST = "sportapi7.p.rapidapi.com"
-
-HEADERS = {
-"X-RapidAPI-Key": API_KEY,
-"X-RapidAPI-Host": HOST
-}
-
-
+@st.cache_data(ttl=600)
 def jogos_do_dia(data):
 
-    url = f"https://{HOST}/api/v1/sport/football/scheduled-events/{data}"
+    try:
 
-    r = requests.get(url, headers=HEADERS)
+        url = f"https://{HOST}/api/v1/sport/football/scheduled-events/{data}"
 
-    if r.status_code != 200:
+        r = requests.get(url, headers=HEADERS, timeout=10)
+
+        if r.status_code != 200:
+            return []
+
+        return r.json().get("events", [])
+
+    except:
         return []
 
-    return r.json().get("events", [])
 
-
+@st.cache_data(ttl=600)
 def estatisticas_time(tournament_id, season_id, team_id):
 
-    url = f"https://{HOST}/api/v1/tournament/{tournament_id}/season/{season_id}/standings/total"
+    try:
 
-    r = requests.get(url, headers=HEADERS)
+        url = f"https://{HOST}/api/v1/tournament/{tournament_id}/season/{season_id}/standings/total"
 
-    if r.status_code != 200:
-        return 1.3,1.3
+        r = requests.get(url, headers=HEADERS, timeout=10)
 
-    data = r.json()
+        if r.status_code != 200:
+            return 1.3, 1.3
 
-    rows = data["standings"][0]["rows"]
+        data = r.json()
 
-    for row in rows:
+        rows = data["standings"][0]["rows"]
 
-        if row["team"]["id"] == team_id:
+        for row in rows:
 
-            jogos = max(row["matches"],1)
+            if row["team"]["id"] == team_id:
 
-            gp = row["scoresFor"]
-            gs = row["scoresAgainst"]
+                jogos = max(row["matches"], 1)
 
-            return gp/jogos, gs/jogos
+                gp = row["scoresFor"]
+                gs = row["scoresAgainst"]
 
-    return 1.3,1.3
-import streamlit as st
-from datetime import datetime
+                return gp / jogos, gs / jogos
 
-from api_dados import *
-from core_modelo import *
+        return 1.3, 1.3
+
+    except:
+        return 1.3, 1.3
+
+
+# =========================
+# INTERFACE STREAMLIT
+# =========================
 
 st.set_page_config(
-page_title="PROBET 4.0",
-layout="wide",
-page_icon="⚽"
+    page_title="PROBET 4.0",
+    layout="wide",
+    page_icon="⚽"
 )
 
 st.title("⚽ PROBET 4.0")
 
-data = st.date_input("Data dos jogos", value=datetime.now())
 
-jogos = jogos_do_dia(data.strftime("%Y-%m-%d"))
+data = st.date_input("📅 Data dos jogos", value=datetime.now())
+
+data_str = data.strftime("%Y-%m-%d")
+
+jogos = jogos_do_dia(data_str)
+
+# =========================
+# LISTA DE JOGOS
+# =========================
 
 if not jogos:
 
@@ -156,9 +189,9 @@ else:
 
         nomes[nome] = j
 
-    escolha = st.selectbox("Escolha o jogo", list(nomes.keys()))
+    escolha = st.selectbox("🎯 Escolha o jogo", list(nomes.keys()))
 
-    if st.button("GERAR ANÁLISE"):
+    if st.button("🔎 GERAR ANÁLISE"):
 
         jogo = nomes[escolha]
 
@@ -171,40 +204,48 @@ else:
         tournament = jogo["tournament"]["id"]
         season = jogo["season"]["id"]
 
-        h_atq,h_def = estatisticas_time(tournament,season,h_id)
-        a_atq,a_def = estatisticas_time(tournament,season,a_id)
+        h_atq, h_def = estatisticas_time(tournament, season, h_id)
+        a_atq, a_def = estatisticas_time(tournament, season, a_id)
 
-        lambda_home, lambda_away = prever_gols(h_atq,h_def,a_atq,a_def)
+        lambda_home, lambda_away = prever_gols(h_atq, h_def, a_atq, a_def)
 
-        p_casa,p_empate,p_fora = prever_1x2(lambda_home,lambda_away)
+        p_casa, p_empate, p_fora = prever_1x2(lambda_home, lambda_away)
 
         media = lambda_home + lambda_away
 
+        # =========================
+        # RESULTADOS
+        # =========================
+
         st.header(f"{home} vs {away}")
 
-        c1,c2,c3 = st.columns(3)
+        c1, c2, c3 = st.columns(3)
 
-        c1.metric("Casa",f"{p_casa:.1f}%")
-        c2.metric("Empate",f"{p_empate:.1f}%")
-        c3.metric("Fora",f"{p_fora:.1f}%")
+        c1.metric("🏠 Casa", f"{p_casa:.1f}%")
+        c2.metric("🤝 Empate", f"{p_empate:.1f}%")
+        c3.metric("✈️ Fora", f"{p_fora:.1f}%")
 
-        st.subheader("Mercados")
+        st.divider()
 
-        over15 = prob_over(media,1.5)
-        over25 = prob_over(media,2.5)
+        st.subheader("📊 Mercados")
 
-        btts = calcular_btts(lambda_home,lambda_away)
+        over15 = prob_over(media, 1.5)
+        over25 = prob_over(media, 2.5)
 
-        m1,m2,m3 = st.columns(3)
+        btts = calcular_btts(lambda_home, lambda_away)
 
-        m1.metric("Over 1.5",f"{over15:.1f}%")
-        m2.metric("Over 2.5",f"{over25:.1f}%")
-        m3.metric("BTTS",f"{btts:.1f}%")
+        m1, m2, m3 = st.columns(3)
 
-        st.subheader("Placares prováveis")
+        m1.metric("Over 1.5", f"{over15:.1f}%")
+        m2.metric("Over 2.5", f"{over25:.1f}%")
+        m3.metric("BTTS", f"{btts:.1f}%")
 
-        placares = placares_provaveis(lambda_home,lambda_away)
+        st.divider()
 
-        for p in placares:
+        st.subheader("🎯 Placares Prováveis")
 
-            st.write(p)
+        placares = placares_provaveis(lambda_home, lambda_away)
+
+        for placar, prob in placares:
+
+            st.write(f"{placar} → {prob:.2f}%")
