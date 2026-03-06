@@ -194,4 +194,3 @@ if jogos:
             st.info(f"⚖️ Juiz: {jogo_selecionado.get('referee', {}).get('name', 'Pendente')}")
 else:
     st.warning(f"⚠️ Nenhum jogo disponível para {formatar_data_br(data_sel)}.")
-
