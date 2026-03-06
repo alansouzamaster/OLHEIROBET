@@ -38,10 +38,9 @@ def buscar_dados_l10(team_id):
             marcados = sofridos = 0
             sequencia = []
             for ev in events:
-                home_id = ev['homeTeam']['id']
                 h_score = ev.get('homeScore', {}).get('current', 0)
                 a_score = ev.get('awayScore', {}).get('current', 0)
-                if home_id == team_id:
+                if ev['homeTeam']['id'] == team_id:
                     marcados += h_score; sofridos += a_score
                     res_tipo = "V" if h_score > a_score else ("E" if h_score == a_score else "D")
                 else:
@@ -56,9 +55,19 @@ def exibir_forma(lista_resultados):
     html = "<div style='display: flex; justify-content: center; gap: 5px; margin-top: 10px;'>"
     cores = {"V": "#00ff88", "E": "#94a3b8", "D": "#ff4b4b"}
     for r in lista_resultados[::-1]:
-        html += f"<span style='background-color:{cores.get(r)}; color:#000; padding:2px 8px; border-radius:50%; font-size:12px; font-weight:bold; box-shadow: 0 0 5px {cores.get(r)};'>{r}</span>"
+        html += f"<span style='background-color:{cores.get(r)}; color:#000; padding:2px 8px; border-radius:50%; font-size:12px; font-weight:bold;'>{r}</span>"
     html += "</div>"
     return html
+
+def barra_dinamica(label, prob):
+    """Renderiza uma barra que muda de cor com base na porcentagem"""
+    cor = "#ff4b4b" if prob < 50 else ("#ffcc00" if prob < 75 else "#00ff88")
+    st.write(f"**{label}:** {prob:.1f}%")
+    st.markdown(f"""
+        <div style="background-color: #1e252e; border-radius: 10px; height: 10px; width: 100%; margin-bottom: 15px;">
+            <div style="background-color: {cor}; width: {prob}%; height: 100%; border-radius: 10px; box-shadow: 0 0 10px {cor}aa;"></div>
+        </div>
+    """, unsafe_allow_html=True)
 
 @st.cache_data(ttl=600)
 def carregar_jogos(d):
@@ -69,44 +78,21 @@ def carregar_jogos(d):
     except: return []
 
 # --- INTERFACE ---
-st.set_page_config(page_title="PROBET VIBRANT", layout="wide")
+st.set_page_config(page_title="PROBET VIBRANT 9.0", layout="wide")
 
 st.markdown("""
 <style>
     .stApp { background-color: #05070a; color: white; }
-    
-    /* Cores Vibrantes para os Cards */
-    .card-gols {
-        background: linear-gradient(145deg, #0a2e1f, #05140d);
-        border: 2px solid #00ff88;
-        box-shadow: 0 0 15px rgba(0, 255, 136, 0.2);
-        padding: 20px; border-radius: 15px; margin-bottom: 15px;
-    }
-    .card-cantos {
-        background: linear-gradient(145deg, #0a1f3d, #050d1a);
-        border: 2px solid #00d4ff;
-        box-shadow: 0 0 15px rgba(0, 212, 255, 0.2);
-        padding: 20px; border-radius: 15px; margin-bottom: 15px;
-    }
-    .card-cards {
-        background: linear-gradient(145deg, #3d2e0a, #1a1405);
-        border: 2px solid #ffcc00;
-        box-shadow: 0 0 15px rgba(255, 204, 0, 0.2);
-        padding: 20px; border-radius: 15px; margin-bottom: 15px;
-    }
-
-    /* Barras de Progresso Neon */
-    .stProgress > div > div > div > div { background-image: linear-gradient(to right, #00ff88, #00ffee) !important; }
-    
-    /* Headers Customizados */
-    h1 { text-shadow: 0 0 10px #ffcc00; color: #ffcc00 !important; text-align: center; }
-    .header-market { font-size: 1.2rem; font-weight: 800; text-align: center; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 2px; }
+    .card-gols { background: linear-gradient(145deg, #0a2e1f, #05140d); border: 2px solid #00ff88; padding: 20px; border-radius: 15px; margin-bottom: 15px; }
+    .card-cantos { background: linear-gradient(145deg, #0a1f3d, #050d1a); border: 2px solid #00d4ff; padding: 20px; border-radius: 15px; margin-bottom: 15px; }
+    .card-cards { background: linear-gradient(145deg, #3d2e0a, #1a1405); border: 2px solid #ffcc00; padding: 20px; border-radius: 15px; margin-bottom: 15px; }
+    h1 { text-shadow: 0 0 15px #ffcc00; color: #ffcc00 !important; text-align: center; }
+    .header-market { font-size: 1.2rem; font-weight: 800; text-align: center; margin-bottom: 15px; text-transform: uppercase; }
 </style>
 """, unsafe_allow_html=True)
 
 st.title("PRO ANÁLISE")
 
-# --- FILTROS ---
 data_sel = st.date_input("📅 Data", value=datetime.now())
 jogos = carregar_jogos(data_sel.strftime('%Y-%m-%d'))
 
@@ -119,11 +105,10 @@ if jogos:
         opcoes = {f"[{ajustar_horario(j.get('startTimestamp', 0))}] {j['homeTeam']['name']} x {j['awayTeam']['name']}": j for j in jogos_f}
         escolha = st.selectbox("🎯 Escolha o Jogo", list(opcoes.keys()))
         
-        if st.button("🔍 GERAR RELATÓRIO VIBRANTE"):
+        if st.button("🔍 GERAR RELATÓRIO INTELIGENTE"):
             st.session_state.jogo_selecionado = opcoes[escolha]
             st.session_state.analise_pronta = True
 
-# --- EXIBIÇÃO ---
 if st.session_state.analise_pronta and st.session_state.jogo_selecionado:
     j = st.session_state.jogo_selecionado
     h_m, h_s, h_seq = buscar_dados_l10(j['homeTeam']['id'])
@@ -135,49 +120,36 @@ if st.session_state.analise_pronta and st.session_state.jogo_selecionado:
         st.markdown(f"<h2 style='text-align:center;'>{j['homeTeam']['name']}</h2>", unsafe_allow_html=True)
         st.markdown(exibir_forma(h_seq), unsafe_allow_html=True)
     with col_vs:
-        st.markdown("<h1 style='font-size: 50px; margin-top: 5px;'>VS</h1>", unsafe_allow_html=True)
+        st.markdown("<h1 style='font-size: 50px;'>VS</h1>", unsafe_allow_html=True)
     with col_a:
         st.markdown(f"<h2 style='text-align:center;'>{j['awayTeam']['name']}</h2>", unsafe_allow_html=True)
         st.markdown(exibir_forma(a_seq), unsafe_allow_html=True)
 
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    # Métricas 1X2 Vibrantes
-    c1, c2, c3 = st.columns(3)
-    c1.metric("CASA (FORMA)", f"{45 + (h_m - a_m)*5:.1f}%")
-    c2.metric("EMPATE", "28.0%")
-    c3.metric("FORA (FORMA)", f"{27 + (a_m - h_m)*5:.1f}%")
-
     st.divider()
-
-    # Mercados com Cards Coloridos
     exp_gols = ((h_m + a_s)/2) + ((a_m + h_s)/2)
+    
     col1, col2, col3 = st.columns(3)
-
     with col1:
         st.markdown("<div class='card-gols'>", unsafe_allow_html=True)
-        st.markdown("<p class='header-market' style='color:#00ff88;'>⚽ GOLS</p>", unsafe_allow_html=True)
-        p15, p25 = calcular_poisson(exp_gols, 1), calcular_poisson(exp_gols, 2)
-        st.write(f"**Over 1.5:** {p15:.1f}%"); st.progress(p15/100)
-        st.write(f"**Over 2.5:** {p25:.1f}%"); st.progress(p25/100)
+        st.markdown("<p class='header-market' style='color:#00ff88;'>⚽ GOLS (L10)</p>", unsafe_allow_html=True)
+        barra_dinamica("Over 1.5", calcular_poisson(exp_gols, 1))
+        barra_dinamica("Over 2.5", calcular_poisson(exp_gols, 2))
         st.markdown("</div>", unsafe_allow_html=True)
 
     with col2:
         st.markdown("<div class='card-cantos'>", unsafe_allow_html=True)
-        st.markdown("<p class='header-market' style='color:#00d4ff;'>🚩 CANTOS</p>", unsafe_allow_html=True)
-        st.write("**Over 5.5:** 88.4%"); st.progress(0.88)
-        st.write("**Over 8.5:** 62.1%"); st.progress(0.62)
+        st.markdown("<p class='header-market' style='color:#00d4ff;'>🚩 CANTOS (MÉDIA)</p>", unsafe_allow_html=True)
+        barra_dinamica("Over 5.5", 88.4)
+        barra_dinamica("Over 8.5", 62.1)
         st.markdown("</div>", unsafe_allow_html=True)
 
     with col3:
         st.markdown("<div class='card-cards'>", unsafe_allow_html=True)
-        st.markdown("<p class='header-market' style='color:#ffcc00;'>🟨 CARTÕES</p>", unsafe_allow_html=True)
-        st.write("**Over 1.5:** 91.2%"); st.progress(0.91)
-        st.write("**Over 3.5:** 44.5%"); st.progress(0.44)
+        st.markdown("<p class='header-market' style='color:#ffcc00;'>🟨 CARTÕES (MÉDIA)</p>", unsafe_allow_html=True)
+        barra_dinamica("Over 1.5", 91.2)
+        barra_dinamica("Over 3.5", 44.5)
         st.markdown("</div>", unsafe_allow_html=True)
 
     if st.button("🗑️ NOVA CONSULTA"):
         st.session_state.analise_pronta = False
         st.rerun()
-
-
