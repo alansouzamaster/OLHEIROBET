@@ -13,7 +13,7 @@ if 'analise_pronta' not in st.session_state:
     st.session_state.analise_pronta = False
     st.session_state.jogo_selecionado = None
 
-# --- FUNÇÕES ---
+# --- FUNÇÕES DE CÁLCULO ---
 def ajustar_horario(timestamp):
     dt_utc = datetime.fromtimestamp(timestamp)
     dt_br = dt_utc - timedelta(hours=3)
@@ -36,84 +36,105 @@ def carregar_jogos(d):
     except: return []
 
 # --- INTERFACE ---
-st.set_page_config(page_title="PROBET v6.2", layout="wide")
+st.set_page_config(page_title="PROBET v7.0", layout="wide")
 
+# CSS para melhorar o visual dos containers nativos
 st.markdown("""
 <style>
     .stApp { background-color: #0b0e11; color: white; }
-    .res-box { text-align: center; padding: 15px; border-radius: 12px; font-weight: bold; color: white; margin-bottom: 10px; font-size: 20px; }
-    .card-gols { background: #16222e; padding: 20px; border-radius: 15px; border: 1px solid #1e3a5f; }
-    .card-cantos { background: #162e21; padding: 20px; border-radius: 15px; border: 1px solid #1e5f3a; }
-    .card-cards { background: #2e2616; padding: 20px; border-radius: 15px; border: 1px solid #5f4d1e; }
-    .label-text { color: #bbb; font-size: 13px; }
-    .prob-text { font-weight: bold; font-size: 15px; }
-    .bar-bg { background-color: #2d333b; border-radius: 10px; height: 8px; width: 100%; margin-bottom: 15px; }
+    div[data-testid="stVerticalBlock"] > div {
+        background-color: #161b22;
+        padding: 15px;
+        border-radius: 10px;
+        border: 1px solid #30363d;
+    }
+    h1, h2, h3 { color: #ffc107 !important; text-align: center; }
+    .stProgress > div > div > div > div { background-color: #28a745; }
 </style>
 """, unsafe_allow_html=True)
 
 st.title("⚽ PROBET ANALISE")
 
-data_sel = st.date_input("📅 Data", value=datetime.now())
+# --- FILTROS ---
+data_sel = st.date_input("📅 Data das Partidas", value=datetime.now())
 jogos = carregar_jogos(data_sel.strftime('%Y-%m-%d'))
 
 if jogos:
     ligas = sorted(list(set([j['tournament']['name'] for j in jogos])))
-    ligas_sel = st.multiselect("🏆 Ligas", ligas)
+    ligas_sel = st.multiselect("🏆 Selecione as Ligas", ligas)
     jogos_f = [j for j in jogos if j['tournament']['name'] in ligas_sel] if ligas_sel else jogos
     
     if jogos_f:
         opcoes = {f"[{ajustar_horario(j.get('startTimestamp', 0))}] {j['homeTeam']['name']} x {j['awayTeam']['name']}": j for j in jogos_f}
-        escolha = st.selectbox("🎯 Partida:", list(opcoes.keys()))
+        escolha = st.selectbox("🎯 Escolha uma partida:", list(opcoes.keys()))
         
-        if st.button("🔍 GERAR RELATÓRIO"):
+        if st.button("🔍 GERAR RELATÓRIO PREDITIVO"):
             st.session_state.jogo_selecionado = opcoes[escolha]
             st.session_state.analise_pronta = True
 
+# --- EXIBIÇÃO ---
 if st.session_state.analise_pronta and st.session_state.jogo_selecionado:
     j = st.session_state.jogo_selecionado
-    m_total = 2.8 # Média base para exemplo técnico
+    st.divider()
     
-    st.markdown(f"<h1 style='text-align:center;'>{j['homeTeam']['name']} VS {j['awayTeam']['name']}</h1>", unsafe_allow_html=True)
-    
-    st.write("### 📊 Probabilidades 1X2")
-    c1, c2, c3 = st.columns(3)
-    c1.markdown("<div class='res-box' style='background:#1f77b4;'>CASA: 65%</div>", unsafe_allow_html=True)
-    c2.markdown("<div class='res-box' style='background:#333;'>EMPATE: 26%</div>", unsafe_allow_html=True)
-    c3.markdown("<div class='res-box' style='background:#dc3545;'>FORA: 9%</div>", unsafe_allow_html=True)
+    st.header(f"{j['homeTeam']['name']} vs {j['awayTeam']['name']}")
+    st.write(f"**Competição:** {j['tournament']['name']} | **Horário:** {ajustar_horario(j.get('startTimestamp', 0))} (Brasília)")
 
-    st.markdown("<br>", unsafe_allow_html=True)
+    # 1X2 Probabilidades com st.columns
+    st.subheader("📊 Probabilidades 1X2")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Casa", "65.0%")
+    c2.metric("Empate", "26.0%")
+    c3.metric("Fora", "9.0%")
+
+    st.divider()
+
+    # Mercados com Componentes Nativos (Sem risco de mostrar código)
+    m_total = 2.8 # Média base para cálculos
     col1, col2, col3 = st.columns(3)
 
-    # Função interna para evitar erro de renderização
-    def draw_metric(label, p):
-        cor = "#28a745" if p >= 75 else ("#ffc107" if p >= 50 else "#dc3545")
-        glow = f"box-shadow: 0 0 12px {cor};" if p >= 80 else ""
-        return f"""
-        <div style='display:flex; justify-content:space-between;'>
-            <span class='label-text'>{label}</span>
-            <span class='prob-text' style='color:{cor};'>{p:.1f}%</span>
-        </div>
-        <div class='bar-bg'><div style='background-color:{cor}; width:{p}%; height:100%; border-radius:10px; {glow}'></div></div>
-        """
-
     with col1:
-        st.markdown("<p style='text-align:center; color:#ffc107; font-weight:bold;'>⚽ GOLS</p>", unsafe_allow_html=True)
-        g1 = draw_metric("OVER 1.5 GOLS", calcular_poisson(m_total, 1))
-        g2 = draw_metric("OVER 2.5 GOLS", calcular_poisson(m_total, 2))
-        st.write(f"<div class='card-gols'>{g1}{g2}</div>", unsafe_allow_html=True)
+        st.subheader("⚽ GOLS")
+        
+        # Over 1.5
+        p15 = calcular_poisson(m_total, 1)
+        st.write(f"**Over 1.5 Gols:** {p15:.1f}%")
+        st.progress(p15/100)
+        
+        # Over 2.5
+        p25 = calcular_poisson(m_total, 2)
+        st.write(f"**Over 2.5 Gols:** {p25:.1f}%")
+        st.progress(p25/100)
 
     with col2:
-        st.markdown("<p style='text-align:center; color:#ffc107; font-weight:bold;'>🚩 CANTOS</p>", unsafe_allow_html=True)
-        s1 = draw_metric("OVER 5.5 CANTOS", calcular_poisson(9.5, 5))
-        s2 = draw_metric("OVER 8.5 CANTOS", calcular_poisson(9.5, 8))
-        st.write(f"<div class='card-cantos'>{s1}{s2}</div>", unsafe_allow_html=True)
+        st.subheader("🚩 CANTOS")
+        
+        # Over 5.5
+        c55 = calcular_poisson(9.5, 5)
+        st.write(f"**Over 5.5 Cantos:** {c55:.1f}%")
+        st.progress(c55/100)
+        
+        # Over 8.5
+        c85 = calcular_poisson(9.5, 8)
+        st.write(f"**Over 8.5 Cantos:** {c85:.1f}%")
+        st.progress(c85/100)
 
     with col3:
-        st.markdown("<p style='text-align:center; color:#ffc107; font-weight:bold;'>🟨 CARTÕES</p>", unsafe_allow_html=True)
-        ct1 = draw_metric("OVER 1.5 CARTÕES", calcular_poisson(4.2, 1))
-        ct2 = draw_metric("OVER 3.5 CARTÕES", calcular_poisson(4.2, 3))
-        st.write(f"<div class='card-cards'>{ct1}{ct2}</div>", unsafe_allow_html=True)
+        st.subheader("🟨 CARTÕES")
+        
+        # Over 1.5
+        ct15 = calcular_poisson(4.2, 1)
+        st.write(f"**Over 1.5 Cartões:** {ct15:.1f}%")
+        st.progress(ct15/100)
+        
+        # Over 3.5
+        ct35 = calcular_poisson(4.2, 3)
+        st.write(f"**Over 3.5 Cartões:** {ct35:.1f}%")
+        st.progress(ct35/100)
 
-    if st.button("🗑️ LIMPAR"):
+    if st.button("🗑️ LIMPAR ANÁLISE"):
         st.session_state.analise_pronta = False
         st.rerun()
+
+elif not jogos:
+    st.info("Nenhum jogo encontrado para esta data.")
