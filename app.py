@@ -37,16 +37,20 @@ def prever_1x2_avancado(h_atq, h_def, a_atq, a_def):
     p_fora = sobra * (l_fora / total) if total > 0 else sobra / 2
     return p_casa, p_empate, p_fora, total
 
-@st.cache_data(ttl=3600) # Cache menor para evitar travar lista vazia
-def carregar_jogos(d):
+def carregar_jogos_debug(d):
+    """Função com relatório de erros para diagnóstico"""
     try:
         url = f"https://{HOST}/api/v1/sport/football/scheduled-events/{d}"
         res = requests.get(url, headers=HEADERS, timeout=15)
         if res.status_code == 200:
-            return res.json().get('events', [])
-        return []
-    except:
-        return []
+            eventos = res.json().get('events', [])
+            return eventos, "OK"
+        elif res.status_code == 403:
+            return [], "Erro 403: Chave API inválida ou limite atingido."
+        else:
+            return [], f"Erro {res.status_code}: Problema na API."
+    except Exception as e:
+        return [], f"Erro de Conexão: {str(e)}"
 
 @st.cache_data(ttl=86400)
 def buscar_estatisticas(t_id, s_id, h_id, a_id):
@@ -66,38 +70,85 @@ def buscar_estatisticas(t_id, s_id, h_id, a_id):
     return 1.4, 1.2, 1.1, 1.3
 
 # --- INTERFACE ---
-st.set_page_config(page_title="PROBET ANALISE v5.0", layout="wide", page_icon="⚽")
+st.set_page_config(page_title="PROBET ANALISE v6.0", layout="wide")
 
+# CSS para esconder mensagens chatas do Streamlit e melhorar visual
 st.markdown("""
     <style>
     .stApp { background-color: #0e1117; color: #e0e0e0; }
     .res-box { text-align: center; padding: 15px; border-radius: 8px; font-weight: bold; color: white; margin-bottom: 10px; font-size: 20px; }
     .metric-container { background-color: #1c2128; padding: 15px; border-radius: 10px; border: 1px solid #30363d; margin-top: 5px; }
     .metric-row { display: flex; justify-content: space-between; margin-bottom: 8px; align-items: center; border-bottom: 1px solid #2d333b; padding-bottom: 5px; }
-    .metric-row:last-child { border-bottom: none; }
     </style>
     """, unsafe_allow_html=True)
 
 st.title("⚽ PROBET ANALISE")
 
-# --- FILTROS DE BUSCA ---
-st.sidebar.header("⚙️ Configurações")
-data_sel = st.sidebar.date_input("Data das Partidas", value=datetime.now())
+# --- BARRA LATERAL (CONFIG) ---
+st.sidebar.header("📅 FILTRO DE DATA")
+data_sel = st.sidebar.date_input("Selecione o Dia", value=datetime.now())
 data_str = data_sel.strftime('%Y-%m-%d')
 
-with st.spinner(f"Buscando jogos para {data_str}..."):
-    jogos = carregar_jogos(data_str)
+# --- BUSCA DE DADOS ---
+jogos, status = carregar_jogos_debug(data_str)
 
-if jogos:
-    # 1. Menu de Ligas
-    ligas = sorted(list(set([j['tournament']['name'] for j in jogos])))
-    ligas_sel = st.multiselect("🏆 1. Selecione as Ligas", ligas)
+if status != "OK":
+    st.error(status)
+elif not jogos:
+    st.warning(f"⚠️ Nenhum jogo agendado encontrado para {data_str}. Tente selecionar outra data na barra lateral (ex: amanhã).")
+else:
+    # FILTRO DE LIGAS
+    todas_ligas = sorted(list(set([j['tournament']['name'] for j in jogos])))
+    ligas_sel = st.multiselect("🏆 1. Escolha as Ligas:", todas_ligas)
     
-    # Filtrar jogos pelas ligas selecionadas
+    # FILTRO DE TIMES
     jogos_f = [j for j in jogos if j['tournament']['name'] in ligas_sel] if ligas_sel else jogos
     
-    # 2. Menu de Partidas
-    if jogos_f:
-        opcoes_partidas = {}
-        for j in jogos_f:
-            hora = datetime.fromtimestamp(j.get('startTimestamp',
+    if ligas_sel:
+        lista_partidas = {f"[{datetime.fromtimestamp(j.get('startTimestamp', 0)).strftime('%H:%M')}] {j['homeTeam']['name']} x {j['awayTeam']['name']}": j for j in jogos_f}
+        
+        escolha = st.selectbox("🎯 2. Escolha o Jogo:", list(lista_partidas.keys()))
+        
+        if st.button("🔍 ANALISAR PARTIDA"):
+            st.session_state.jogo_selecionado = lista_partidas[escolha]
+            st.session_state.analise_pronta = True
+    else:
+        st.info("💡 Por favor, selecione pelo menos uma liga no menu acima para listar os jogos.")
+
+# --- RESULTADOS ---
+if st.session_state.analise_pronta and st.session_state.jogo_selecionado:
+    # (O restante do código de exibição permanece igual para manter o visual Pro)
+    j = st.session_state.jogo_selecionado
+    st.divider()
+    
+    id_h, id_a = j['homeTeam']['id'], j['awayTeam']['id']
+    logo_h = f"https://api.sofascore.app/api/v1/team/{id_h}/image"
+    logo_a = f"https://api.sofascore.app/api/v1/team/{id_a}/image"
+
+    h_atq, h_def, a_atq, a_def = buscar_estatisticas(j['tournament']['id'], j['season']['id'], id_h, id_a)
+    p_c, p_e, p_f, m_t = prever_1x2_avancado(h_atq, h_def, a_atq, a_def)
+
+    col1, col2, col3 = st.columns([1,3,1])
+    with col1: st.image(logo_h, width=100)
+    with col2: 
+        st.markdown(f"<h1 style='text-align:center;'>{j['homeTeam']['name']} x {j['awayTeam']['name']}</h1>", unsafe_allow_html=True)
+    with col3: st.image(logo_a, width=100)
+
+    # Vitórias
+    c1, c2, c3 = st.columns(3)
+    c1.markdown(f"<div class='res-box' style='background-color:#1f77b4;'>Casa: {p_c:.1f}%</div>", unsafe_allow_html=True)
+    c2.markdown(f"<div class='res-box' style='background-color:#444;'>Empate: {p_e:.1f}%</div>", unsafe_allow_html=True)
+    c3.markdown(f"<div class='res-box' style='background-color:#dc3545;'>Fora: {p_f:.1f}%</div>", unsafe_allow_html=True)
+
+    # Detalhes
+    st.divider()
+    m1, m2, m3 = st.columns(3)
+    def draw(t, d):
+        h = f"### {t}<div class='metric-container'>"
+        for l, v in d:
+            h += f"<div class='metric-row'><span>{l}</span><span style='color:{get_color(v)};font-weight:bold;'>{v:.1f}%</span></div>"
+        return h + "</div>"
+    
+    with m1: st.markdown(draw("⚽ GOLS", [("Over 1.5", calcular_poisson(m_t, 1)), ("Over 2.5", calcular_poisson(m_t, 2))]), unsafe_allow_html=True)
+    with m2: st.markdown(draw("🚩 CANTOS", [("Over 8.5", calcular_poisson(9.5, 8)), ("Over 10.5", calcular_poisson(9.5, 10))]), unsafe_allow_html=True)
+    with m3: st.markdown(draw("🟨 CARTÕES", [("Over 3.5", calcular_poisson(4.2, 3)), ("Over 4.5", calcular_poisson(4.2, 4))]), unsafe_allow_html=True)
