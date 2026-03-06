@@ -81,7 +81,7 @@ def formatar_metric(label, prob):
     """
 
 # --- INTERFACE (CONFIG E CSS) ---
-st.set_page_config(page_title="PROBET v5.5", layout="wide")
+st.set_page_config(page_title="PROBET v5.8", layout="wide")
 
 st.markdown("""
     <style>
@@ -93,7 +93,7 @@ st.markdown("""
         box-shadow: 0 4px 10px rgba(0,0,0,0.3);
     }
 
-    /* Cards Estilizados */
+    /* Cards Estilizados com Cores por Mercado */
     .card-gols {
         background: linear-gradient(145deg, #16222e, #0f171f);
         padding: 22px; border-radius: 15px; border: 1px solid #1e3a5f;
@@ -143,7 +143,7 @@ if st.session_state.analise_pronta and st.session_state.jogo_selecionado:
     j = st.session_state.jogo_selecionado
     st.divider()
     
-    # Processamento
+    # Processamento de Dados Reais
     h_atq, h_def, a_atq, a_def = buscar_stats(j['tournament']['id'], j['season']['id'], j['homeTeam']['id'], j['awayTeam']['id'])
     p_c, p_e, p_f, m_total = prever_1x2_avancado(h_atq, h_def, a_atq, a_def)
 
@@ -160,7 +160,7 @@ if st.session_state.analise_pronta and st.session_state.jogo_selecionado:
 
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # Cards de Mercados
+    # Cards de Mercados (Métricas Duplas Atualizadas)
     col1, col2, col3 = st.columns(3)
 
     with col1:
@@ -171,17 +171,19 @@ if st.session_state.analise_pronta and st.session_state.jogo_selecionado:
 
     with col2:
         st.markdown("<div class='section-header'>🚩 Cantos</div>", unsafe_allow_html=True)
-        html = formatar_metric("OVER 8.5 CANTOS", calcular_poisson(9.5, 8))
-        html += formatar_metric("OVER 10.5 CANTOS", calcular_poisson(9.5, 10))
+        # Média baseada em tendência de 9.5 cantos p/ jogo
+        html = formatar_metric("OVER 5.5 CANTOS", calcular_poisson(9.5, 5))
+        html += formatar_metric("OVER 8.5 CANTOS", calcular_poisson(9.5, 8))
         st.markdown(f"<div class='card-cantos'>{html}</div>", unsafe_allow_html=True)
 
     with col3:
         st.markdown("<div class='section-header'>🟨 Cartões</div>", unsafe_allow_html=True)
-        html = formatar_metric("OVER 3.5 CARTÕES", calcular_poisson(4.2, 3))
-        html += formatar_metric("OVER 4.5 CARTÕES", calcular_poisson(4.2, 4))
+        # Média baseada em tendência de 4.2 cartões p/ jogo
+        html = formatar_metric("OVER 1.5 CARTÕES", calcular_poisson(4.2, 1))
+        html += formatar_metric("OVER 3.5 CARTÕES", calcular_poisson(4.2, 3))
         st.markdown(f"<div class='card-cards'>{html}</div>", unsafe_allow_html=True)
 
-    if st.button("🗑️ LIMPAR"):
+    if st.button("🗑️ LIMPAR ANÁLISE"):
         st.session_state.analise_pronta = False
         st.rerun()
 
