@@ -56,9 +56,9 @@ def buscar_estatisticas_completas(tournament_id, season_id, home_id, away_id):
     return 1.4, 1.2, 1.1, 1.3
 
 def formatar_metric(label, prob):
-    cor = "#dc3545"
-    if prob >= 70: cor = "#28a745"
-    elif prob >= 50: cor = "#ffc107"
+    cor = "#dc3545" # Vermelho
+    if prob >= 70: cor = "#28a745" # Verde
+    elif prob >= 50: cor = "#ffc107" # Amarelo
     estrela = "⭐" if prob >= 85 else ""
     return f"""
     <div style='margin-bottom: 10px;'>
@@ -69,14 +69,13 @@ def formatar_metric(label, prob):
     """
 
 # --- INTERFACE ---
-st.set_page_config(page_title="PROBET ANALISE v2.0", layout="wide")
+st.set_page_config(page_title="PROBET ANALISE v2.0", layout="wide", page_icon="⚽")
 
 st.markdown("""
     <style>
     .stApp { background-color: #0e1117; color: #e0e0e0; }
     .res-box { text-align: center; padding: 15px; border-radius: 8px; font-weight: bold; color: white; margin-bottom: 10px; font-size: 20px; }
-    .metric-card { background-color: #1c2128; padding: 15px; border-radius: 10px; border: 1px solid #30363d; }
-    .team-logo { width: 80px; height: 80px; object-fit: contain; }
+    .metric-card { background-color: #1c2128; padding: 15px; border-radius: 10px; border: 1px solid #30363d; min-height: 120px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -114,11 +113,11 @@ if st.session_state.analise_pronta and st.session_state.jogo_selecionado:
     jogo = st.session_state.jogo_selecionado
     st.divider()
     
-    # IDs para os escudos
+    # IDs e Logos
     id_casa = jogo['homeTeam']['id']
     id_fora = jogo['awayTeam']['id']
-    url_logo_casa = f"https://api.sofascore.app/api/v1/team/{id_casa}/image"
-    url_logo_fora = f"https://api.sofascore.app/api/v1/team/{id_fora}/image"
+    logo_casa = f"https://api.sofascore.app/api/v1/team/{id_casa}/image"
+    logo_fora = f"https://api.sofascore.app/api/v1/team/{id_fora}/image"
 
     h_atq, h_def, a_atq, a_def = buscar_estatisticas_completas(
         jogo['tournament']['id'], jogo['season']['id'], id_casa, id_fora
@@ -126,39 +125,20 @@ if st.session_state.analise_pronta and st.session_state.jogo_selecionado:
     p_c, p_e, p_f, l_h, l_a = prever_1x2_avancado(h_atq, h_def, a_atq, a_def)
     m_total = l_h + l_a
 
-    # Cabeçalho com Escudos
-    col_logo1, col_txt, col_logo2 = st.columns([1, 4, 1])
-    with col_logo1:
-        st.image(url_logo_casa, width=80)
-    with col_txt:
-        st.markdown(f"<h2 style='text-align: center;'>{jogo['homeTeam']['name']} vs {jogo['awayTeam']['name']}</h2>", unsafe_allow_html=True)
-        st.markdown(f"<p style='text-align: center; color: #888;'>{jogo['tournament']['name']}</p>", unsafe_allow_html=True)
-    with col_logo2:
-        st.image(url_logo_fora, width=80)
+    # Cabeçalho Visual
+    col_l1, col_mid, col_l2 = st.columns([1, 4, 1])
+    with col_l1:
+        st.image(logo_casa, width=100)
+    with col_mid:
+        st.markdown(f"<h1 style='text-align: center;'>{jogo['homeTeam']['name']} vs {jogo['awayTeam']['name']}</h1>", unsafe_allow_html=True)
+        st.markdown(f"<p style='text-align: center; color: #888;'>{jogo['tournament']['name']} • {datetime.fromtimestamp(jogo.get('startTimestamp', 0)).strftime('%d/%m/%Y %H:%M')}</p>", unsafe_allow_html=True)
+    with col_l2:
+        st.image(logo_fora, width=100)
     
-    # 1. Vitórias
+    # Probabilidades de Vitória
     c1, c2, c3 = st.columns(3)
     c1.markdown(f"<div class='res-box' style='background-color:#1f77b4;'>Casa: {p_c:.1f}%</div>", unsafe_allow_html=True)
     c2.markdown(f"<div class='res-box' style='background-color:#444;'>Empate: {p_e:.1f}%</div>", unsafe_allow_html=True)
     c3.markdown(f"<div class='res-box' style='background-color:#dc3545;'>Fora: {p_f:.1f}%</div>", unsafe_allow_html=True)
 
-    # 2. Mercados Secundários
-    st.write("---")
-    m1, m2, m3 = st.columns(3)
-    
-    with m1:
-        st.info("⚽ GOLS")
-        st.markdown(f"<div class='metric-card'>{formatar_metric('Over 1.5', calcular_poisson(m_total, 1))}{formatar_metric('Over 2.5', calcular_poisson(m_total, 2))}</div>", unsafe_allow_html=True)
-
-    with m2:
-        st.info("🚩 CANTOS")
-        st.markdown(f"<div class='metric-card'>{formatar_metric('Over 8.5', calcular_poisson(9.5, 8))}{formatar_metric('Over 10.5', calcular_poisson(9.5, 10))}</div>", unsafe_allow_html=True)
-
-    with m3:
-        st.info("🟨 CARTÕES")
-        st.markdown(f"<div class='metric-card'>{formatar_metric('Over 3.5', calcular_poisson(4.2, 3))}{formatar_metric('Over 4.5', calcular_poisson(4.2, 4)}</div>", unsafe_allow_html=True)
-
-    st.caption(f"Análise Técnica: Ataque {h_atq:.2f} vs {a_atq:.2f} | Defesa {h_def:.2f} vs {a_def:.2f}")
-
-elif not jogos:
-    st.warning("Nenhum jogo disponível para esta data.")
+    # Mercados Secund
