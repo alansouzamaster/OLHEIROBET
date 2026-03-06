@@ -1,101 +1,197 @@
 import streamlit as st
 import requests
 import math
+import random
 from datetime import datetime
+import time
 
 # --- CONFIGURAÇÃO DA API ---
 API_KEY = "a19cf6b5fcmsh62790bdb0d293ddp131982jsn24158e88f703"
 HOST = "sportapi7.p.rapidapi.com"
 HEADERS = {"X-RapidAPI-Key": API_KEY, "X-RapidAPI-Host": HOST}
 
-# --- FUNÇÕES DE BUSCA ---
+# --- FUNÇÕES DE CÁLCULO ---
+def calcular_poisson(media, alvo):
+    if media <= 0: return 0
+    prob_acumulada = 0
+    for i in range(int(alvo) + 1):
+        prob_i = (math.exp(-media) * (media**i)) / math.factorial(i)
+        prob_acumulada += prob_i
+    return (1 - prob_acumulada) * 100
 
-@st.cache_data(ttl=600) # Cache curto (10 min) para escalações
-def buscar_escalacao_real(event_id):
-    """Busca a escalação oficial da partida selecionada."""
-    try:
-        url = f"https://{HOST}/api/v1/event/{event_id}/lineups"
-        response = requests.get(url, headers=HEADERS, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            # Retorna jogadores titulares do mandante e visitante
-            home_players = data.get('home', {}).get('players', [])
-            away_players = data.get('away', {}).get('players', [])
-            return home_players, away_players
-    except:
-        return [], []
-    return [], []
+def prever_1x2(m_casa, m_fora):
+    total = m_casa + m_fora
+    p_empate = 26.0
+    sobra = 100 - p_empate
+    if total > 0:
+        p_casa = sobra * (m_casa / total)
+        p_fora = sobra * (m_fora / total)
+    else:
+        p_casa = p_fora = sobra / 2
+    return p_casa, p_empate, p_fora
 
 @st.cache_data(ttl=86400)
-def buscar_estatisticas_jogador(player_id, tournament_id, season_id):
-    """Busca cartões amarelos do jogador na temporada atual."""
+def buscar_medias_reais(tournament_id, season_id, home_id, away_id):
     try:
-        # Endpoint de estatísticas sazonais do jogador
-        url = f"https://{HOST}/api/v1/player/{player_id}/unique-tournament/{tournament_id}/season/{season_id}/statistics/overall"
-        response = requests.get(url, headers=HEADERS, timeout=10)
+        url = f"https://{HOST}/api/v1/tournament/{tournament_id}/season/{season_id}/standings/total"
+        response = requests.get(url, headers=HEADERS, timeout=12)
         if response.status_code == 200:
-            stats = response.json().get('statistics', {})
-            yellow_cards = stats.get('yellowCards', 0)
-            matches_played = stats.get('appearances', 1) or 1
-            # Cálculo de probabilidade baseada na média da temporada
-            prob = (yellow_cards / matches_played) * 100
-            return yellow_cards, matches_played, round(min(prob, 99), 1)
-    except:
-        return 0, 0, 0
-    return 0, 0, 0
+            data = response.json()
+            standings_list = data.get('standings', [])
+            if not standings_list: return 1.5, 1.0
+            rows = standings_list[0].get('rows', [])
+            m_casa, m_fora = 1.4, 1.1
+            for row in rows:
+                t_id = row['team']['id']
+                jogos = row.get('matches', 1) or 1
+                if t_id == home_id: m_casa = row.get('scoresFor', 0)/jogos
+                if t_id == away_id: m_fora = row.get('scoresFor', 0)/jogos
+            return round(m_casa, 2), round(m_fora, 2)
+    except: return 1.5, 1.0
+    return 1.5, 1.0
 
-# --- INTERFACE ---
+@st.cache_data(ttl=600)
+def buscar_escalacao_e_cartoes(event_id, tournament_id, season_id):
+    """Busca titulares e estatísticas de cartões na temporada."""
+    try:
+        url_lineup = f"https://{HOST}/api/v1/event/{event_id}/lineups"
+        res = requests.get(url_lineup, headers=HEADERS, timeout=10)
+        if res.status_code != 200: return []
+        
+        data = res.json()
+        jogadores_alvos = []
+        
+        # Pega mandante e visitante
+        for side in ['home', 'away']:
+            players = data.get(side, {}).get('players', [])
+            # Analisamos apenas os 5 primeiros titulares para economizar requisições
+            for p in players[:5]:
+                p_obj = p.get('player', {})
+                p_id = p_obj.get('id')
+                
+                # Busca estatísticas desse jogador específico na liga
+                url_stats = f"https://{HOST}/api/v1/player/{p_id}/unique-tournament/{tournament_id}/season/{season_id}/statistics/overall"
+                res_s = requests.get(url_stats, headers=HEADERS, timeout=10)
+                if res_s.status_code == 200:
+                    s = res_s.json().get('statistics', {})
+                    amarelos = s.get('yellowCards', 0)
+                    partidas = s.get('appearances', 1) or 1
+                    prob = (amarelos / partidas) * 100
+                    jogadores_alvos.append({
+                        "nome": p_obj.get('name'),
+                        "time": "Casa" if side == 'home' else "Fora",
+                        "amarelos": amarelos,
+                        "jogos": partidas,
+                        "prob": round(min(prob, 99), 1)
+                    })
+        return sorted(jogadores_alvos, key=lambda x: x['prob'], reverse=True)
+    except: return []
 
-# ... (Manter o restante do seu código de filtros e cálculo de Poisson) ...
+def formatar_hora(timestamp):
+    if not timestamp: return "--:--"
+    return datetime.fromtimestamp(timestamp).strftime('%H:%M')
 
-if btn_analise:
+def formatar_data_br(data_obj):
+    return data_obj.strftime('%d/%m/%Y')
+
+# --- INTERFACE E CSS ---
+st.set_page_config(page_title="PROBET ANALISE", layout="wide", page_icon="⚽")
+
+st.markdown("""
+    <style>
+    .stApp { background-color: #0e1117; color: #e0e0e0; }
+    div[data-testid="stMetricValue"] { color: #ffc107 !important; font-size: 24px !important; }
+    .stMetric { background-color: #1c2128; padding: 15px; border-radius: 12px; border: 1px solid #30363d; }
+    .oportunidade-card { background-color: #1c2128; padding: 15px; border-top: 3px solid #ffc107; border-radius: 8px; margin-bottom: 10px; min-height: 160px; }
+    .player-card { background-color: #161b22; padding: 12px; border-radius: 8px; border-left: 5px solid #ffc107; margin-bottom: 8px; }
+    .stButton>button { width: 100%; background-color: #ffc107 !important; color: black !important; font-weight: bold; border-radius: 8px; }
+    .res-box { text-align: center; padding: 12px; border-radius: 8px; font-weight: bold; color: white; margin-bottom: 10px; font-size: 18px; }
+    .horario-badge { background-color: #333; color: #ffc107; padding: 3px 10px; border-radius: 5px; font-weight: bold; }
+    .header-vs { text-align: center; color: #ffc107; font-size: 40px; font-weight: bold; margin-top: 10px; }
+    </style>
+    """, unsafe_allow_html=True)
+
+st.title(" ⚽ PROBET ANALISE ")
+st.markdown("---")
+
+# --- FILTROS DE BUSCA ---
+st.markdown("### 🛠️ CONFIGURAÇÃO DA ANÁLISE")
+container_filtros = st.container()
+
+with container_filtros:
+    data_sel = st.date_input("📅 1. Data das Partidas", value=datetime.now(), format="DD/MM/YYYY")
+
+@st.cache_data(ttl=3600)
+def carregar_jogos(data_str):
+    try:
+        url = f"https://{HOST}/api/v1/sport/football/scheduled-events/{data_str}"
+        response = requests.get(url, headers=HEADERS, timeout=12)
+        return response.json().get('events', []) if response.status_code == 200 else []
+    except: return []
+
+jogos = carregar_jogos(data_sel.strftime('%Y-%m-%d'))
+
+# --- CORREÇÃO DO NAMEERROR: INICIALIZAR VARIÁVEIS ---
+btn_analise = False 
+jogo_selecionado = None
+
+if jogos:
+    todas_ligas = sorted(list(set([j['tournament']['name'] for j in jogos])))
+    with container_filtros:
+        ligas_sel = st.multiselect("🏆 2. Selecione as Ligas", todas_ligas)
+        jogos_f = [j for j in jogos if j['tournament']['name'] in ligas_sel] if ligas_sel else jogos
+        
+        if jogos_f:
+            lista_nomes = {f"[{formatar_hora(j.get('startTimestamp'))}] {j['homeTeam']['name']} x {j['awayTeam']['name']}": j for j in jogos_f}
+            escolha = st.selectbox("🎯 3. Escolha uma partida para analisar:", list(lista_nomes.keys()))
+            jogo_selecionado = lista_nomes[escolha]
+            btn_analise = st.button("🔍 GERAR RELATÓRIO PREDITIVO COMPLETO")
+
+# --- RESULTADO DA ANÁLISE ---
+if btn_analise and jogo_selecionado:
     st.write("---")
-    # ... (Seu código existente de médias e 1X2) ...
+    with st.spinner('Analisando médias e escalações atuais...'):
+        m_h, m_a = buscar_medias_reais(
+            jogo_selecionado['tournament']['id'], 
+            jogo_selecionado['season']['id'], 
+            jogo_selecionado['homeTeam']['id'], 
+            jogo_selecionado['awayTeam']['id']
+        )
+        p_c, p_e, p_f = prever_1x2(m_h, m_a)
+        m_total = m_h + m_a
 
-    st.markdown("### 🟨 RADAR DE CARTÕES: JOGADORES ATUAIS")
+    # Cabeçalho VS
+    hora_f = formatar_hora(jogo_selecionado.get('startTimestamp'))
+    st.markdown(f"<div style='text-align:center;'><span class='horario-badge'>INÍCIO ÀS {hora_f}</span></div>", unsafe_allow_html=True)
+    c1, cv, c2 = st.columns([2, 1, 2])
+    with c1: st.markdown(f"<h2 style='text-align:center;'>{jogo_selecionado['homeTeam']['name']}</h2>", unsafe_allow_html=True)
+    with cv: st.markdown("<div class='header-vs'>VS</div>", unsafe_allow_html=True)
+    with c2: st.markdown(f"<h2 style='text-align:center;'>{jogo_selecionado['awayTeam']['name']}</h2>", unsafe_allow_html=True)
+
+    # Cartões por Jogador (Escalação Atual)
+    st.markdown("### 🟨 PROBABILIDADE DE CARTÃO (TITULARES ATUAIS)")
+    lista_cards = buscar_escalacao_e_cartoes(jogo_selecionado['id'], jogo_selecionado['tournament']['id'], jogo_selecionado['season']['id'])
     
-    h_players, a_players = buscar_escalacao_real(jogo_selecionado['id'])
-    
-    if not h_players:
-        st.warning("⏳ Escalação oficial ainda não disponível. Tente novamente 1h antes do início.")
+    if lista_cards:
+        cols_p = st.columns(2)
+        for i, p in enumerate(lista_cards[:6]): # Mostra o top 6 mais "perigosos"
+            with cols_p[i % 2]:
+                st.markdown(f"""
+                <div class='player-card'>
+                    <strong>{p['nome']}</strong> <small>({p['time']})</small><br>
+                    <small>Histórico: {p['amarelos']} 🟨 em {p['jogos']} jogos</small><br>
+                    <span style='color:#ffc107; font-size: 18px;'>Probabilidade: {p['prob']}%</span>
+                </div>
+                """, unsafe_allow_html=True)
     else:
-        st.info("Probabilidade calculada com base nos cartões recebidos/jogos na temporada atual.")
-        
-        # Mostrar os 3 jogadores mais propensos de cada time
-        c1, c2 = st.columns(2)
-        
-        with c1:
-            st.markdown(f"**{jogo_selecionado['homeTeam']['name']}**")
-            for p in h_players[:5]: # Analisa os 5 primeiros da lista
-                p_obj = p.get('player', {})
-                cards, games, prob = buscar_estatisticas_jogador(
-                    p_obj.get('id'), 
-                    jogo_selecionado['tournament']['id'], 
-                    jogo_selecionado['season']['id']
-                )
-                if prob > 0:
-                    st.markdown(f"""
-                    <div style='background:#161b22; padding:10px; border-radius:5px; margin-bottom:5px; border-left:4px solid #ffc107;'>
-                        <b>{p_obj.get('name')}</b><br>
-                        <small>Temporada: {cards} 🟨 em {games} jogos</small><br>
-                        <span style='color:#ffc107; font-weight:bold;'>Probabilidade: {prob}%</span>
-                    </div>
-                    """, unsafe_allow_html=True)
+        st.warning("⚠️ Escalação oficial ainda não disponível para este jogo.")
 
-        with c2:
-            st.markdown(f"**{jogo_selecionado['awayTeam']['name']}**")
-            for p in a_players[:5]:
-                p_obj = p.get('player', {})
-                cards, games, prob = buscar_estatisticas_jogador(
-                    p_obj.get('id'), 
-                    jogo_selecionado['tournament']['id'], 
-                    jogo_selecionado['season']['id']
-                )
-                if prob > 0:
-                    st.markdown(f"""
-                    <div style='background:#161b22; padding:10px; border-radius:5px; margin-bottom:5px; border-left:4px solid #ffc107;'>
-                        <b>{p_obj.get('name')}</b><br>
-                        <small>Temporada: {cards} 🟨 em {games} jogos</small><br>
-                        <span style='color:#ffc107; font-weight:bold;'>Probabilidade: {prob}%</span>
-                    </div>
-                    """, unsafe_allow_html=True)
+    # Estatísticas Gerais
+    st.markdown("---")
+    m1, m2, m3 = st.columns(3)
+    with m1:
+        st.metric("Over 2.5 Gols", f"{calcular_poisson(m_total, 2):.1f}%")
+    with m2:
+        st.metric("Cantos Over 9.5", f"{calcular_poisson(9.5, 9):.1f}%")
+    with m3:
+        st.info(f"⚖️ Juiz: {jogo_selecionado.get('referee', {}).get('name', 'Pendente')}")
