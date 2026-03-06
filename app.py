@@ -182,7 +182,7 @@ if jogos:
         m1, m2, m3 = st.columns(3)
         with m1:
             st.markdown("#### ⚽ GOLS")
-            st.metric("Over 1.5", f"{calcular_poisson(m_total, 1):.1f}%")A
+            st.metric("Over 1.5", f"{calcular_poisson(m_total, 1):.1f}%")
             st.metric("Over 2.5", f"{calcular_poisson(m_total, 2):.1f}%")
         with m2:
             st.markdown("#### 🚩 CANTOS")
@@ -194,3 +194,4 @@ if jogos:
             st.info(f"⚖️ Juiz: {jogo_selecionado.get('referee', {}).get('name', 'Pendente')}")
 else:
     st.warning(f"⚠️ Nenhum jogo disponível para {formatar_data_br(data_sel)}.")
+
