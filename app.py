@@ -1,26 +1,19 @@
 import streamlit as st
 import requests
 import math
-import time
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # --- CONFIGURAÇÃO DA API ---
 API_KEY = "3a5c2b926bmsh18b3c4624ec302bp1911efjsn84e2922978ff"
 HOST = "sportapi7.p.rapidapi.com"
 HEADERS = {"X-RapidAPI-Key": API_KEY, "X-RapidAPI-Host": HOST}
 
-# --- ESTADO DA SESSÃO ---
+# --- INICIALIZAÇÃO DE ESTADO ---
 if 'analise_pronta' not in st.session_state:
     st.session_state.analise_pronta = False
-if 'jogos_cache' not in st.session_state:
-    st.session_state.jogos_cache = []
+    st.session_state.jogo_selecionado = None
 
-# --- FUNÇÕES ---
-def ajustar_horario(timestamp):
-    dt_utc = datetime.fromtimestamp(timestamp)
-    dt_br = dt_utc - timedelta(hours=3)
-    return dt_br.strftime('%H:%M')
-
+# --- FUNÇÕES DE CÁLCULO ---
 def calcular_poisson(media, alvo):
     if media <= 0: return 0
     prob_acumulada = 0
@@ -29,119 +22,147 @@ def calcular_poisson(media, alvo):
         prob_acumulada += prob_i
     return (1 - prob_acumulada) * 100
 
-def get_color(prob):
-    if prob >= 70: return "#28a745"
-    if prob >= 50: return "#ffc107"
-    return "#dc3545"
+def prever_1x2_avancado(h_atq, h_def, a_atq, a_def):
+    lambda_casa = h_atq * a_def * 1.10 
+    lambda_fora = a_atq * h_def * 0.90 
+    total = lambda_casa + lambda_fora
+    p_empate = 31.0 if total < 2.2 else 26.0
+    sobra = 100 - p_empate
+    if total > 0:
+        p_casa = sobra * (lambda_casa / total)
+        p_fora = sobra * (lambda_fora / total)
+    else:
+        p_casa = p_fora = sobra / 2
+    return p_casa, p_empate, p_fora, lambda_casa, lambda_fora
+
+@st.cache_data(ttl=86400)
+def buscar_estatisticas_completas(tournament_id, season_id, home_id, away_id):
+    try:
+        url = f"https://{HOST}/api/v1/tournament/{tournament_id}/season/{season_id}/standings/total"
+        res = requests.get(url, headers=HEADERS, timeout=12)
+        if res.status_code == 200:
+            data = res.json().get('standings', [{}])
+            if not data: return 1.4, 1.2, 1.1, 1.3
+            rows = data[0].get('rows', [])
+            h_atq, h_def, a_atq, a_def = 1.4, 1.2, 1.1, 1.3
+            for row in rows:
+                t_id = row['team']['id']
+                jogos = max(row.get('matches', 1), 1)
+                gp, gs = row.get('scoresFor', 0), row.get('scoresAgainst', 0)
+                if t_id == home_id: h_atq, h_def = gp/jogos, gs/jogos
+                if t_id == away_id: a_atq, a_def = gp/jogos, gs/jogos
+            return h_atq, h_def, a_atq, a_def
+    except: pass
+    return 1.4, 1.2, 1.1, 1.3
+
+def formatar_metric(label, prob):
+    cor = "#dc3545" # Vermelho
+    if prob >= 70: cor = "#28a745" # Verde
+    elif prob >= 50: cor = "#ffc107" # Amarelo
+    estrela = "⭐" if prob >= 85 else ""
+    # Usei f-string limpa para evitar erros de renderização
+    return f"""
+    <div style='margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;'>
+        <span style='color:#bbb;'>{label}</span> 
+        <span style='color:{cor}; font-weight:bold; font-size:18px;'>{prob:.1f}% {estrela}</span>
+    </div>
+    """
 
 # --- INTERFACE ---
-st.set_page_config(page_title="PROBET v8.0", layout="wide")
+st.set_page_config(page_title="PROBET ANALISE v2.1", layout="wide", page_icon="⚽")
 
 st.markdown("""
     <style>
     .stApp { background-color: #0e1117; color: #e0e0e0; }
-    .res-box { text-align: center; padding: 15px; border-radius: 8px; font-weight: bold; color: white; margin-bottom: 10px; font-size: 20px; border: 1px solid #30363d; }
-    .metric-container { background-color: #1c2128; padding: 15px; border-radius: 10px; border: 1px solid #30363d; margin-top: 5px; }
-    .metric-row { display: flex; justify-content: space-between; margin-bottom: 8px; align-items: center; border-bottom: 1px solid #2d333b; padding-bottom: 5px; }
+    .res-box { text-align: center; padding: 15px; border-radius: 8px; font-weight: bold; color: white; margin-bottom: 10px; font-size: 20px; }
+    .metric-card { background-color: #1c2128; padding: 15px; border-radius: 10px; border: 1px solid #30363d; margin-top: 5px; }
+    .section-title { color: #ffc107; font-weight: bold; margin-bottom: 10px; text-transform: uppercase; font-size: 14px; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("⚽ PROBET ANALISE")
+st.title(" ⚽ PROBET ANALISE ")
 
-# --- BARRA LATERAL (FILTROS) ---
-st.sidebar.header("📅 FILTRO PRINCIPAL")
-data_sel = st.sidebar.date_input("Escolha o Dia", value=datetime.now(), key="data_input")
+# --- FILTROS ---
+data_sel = st.date_input("📅 Data das Partidas", value=datetime.now())
 data_str = data_sel.strftime('%Y-%m-%d')
 
-# RESET DE SEGURANÇA: Se a data mudar, limpa a análise da tela
-if 'data_atual' not in st.session_state or st.session_state.data_atual != data_str:
-    st.session_state.data_atual = data_str
-    st.session_state.analise_pronta = False
-    st.session_state.jogos_cache = []
-
-# --- CARREGAMENTO COM BARRA DE PROGRESSO ---
-if not st.session_state.jogos_cache:
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    
+@st.cache_data(ttl=600)
+def carregar_jogos(d):
     try:
-        status_text.text(f"Conectando à API para o dia {data_str}...")
-        progress_bar.progress(25)
-        
-        url = f"https://{HOST}/api/v1/sport/football/scheduled-events/{data_str}"
-        res = requests.get(url, headers=HEADERS, timeout=12)
-        
-        progress_bar.progress(75)
-        
-        if res.status_code == 200:
-            st.session_state.jogos_cache = res.json().get('events', [])
-            progress_bar.progress(100)
-            time.sleep(0.5)
-            progress_bar.empty()
-            status_text.empty()
-        else:
-            st.error(f"Erro da API (Status {res.status_code}). Verifique sua chave.")
-            progress_bar.empty()
-    except Exception as e:
-        st.error(f"Erro de conexão: {e}")
-        progress_bar.empty()
+        url = f"https://{HOST}/api/v1/sport/football/scheduled-events/{d}"
+        res = requests.get(url, headers=HEADERS, timeout=10)
+        return res.json().get('events', []) if res.status_code == 200 else []
+    except: return []
 
-# --- MENUS ---
-jogos = st.session_state.jogos_cache
+jogos = carregar_jogos(data_str)
 
 if jogos:
-    ligas = sorted(list(set([j['tournament']['name'] for j in jogos])))
-    ligas_sel = st.multiselect("🏆 1. Selecione as Ligas:", ligas)
-    
+    todas_ligas = sorted(list(set([j['tournament']['name'] for j in jogos])))
+    ligas_sel = st.multiselect("🏆 Selecione as Ligas", todas_ligas)
     jogos_f = [j for j in jogos if j['tournament']['name'] in ligas_sel] if ligas_sel else jogos
     
     if jogos_f:
-        opcoes = {}
-        for j in jogos_f:
-            h_br = ajustar_horario(j.get('startTimestamp', 0))
-            label = f"[{h_br}] {j['homeTeam']['name']} x {j['awayTeam']['name']}"
-            opcoes[label] = j
-            
-        escolha = st.selectbox("🎯 2. Escolha a Partida:", list(opcoes.keys()))
+        lista_nomes = {f"[{datetime.fromtimestamp(j.get('startTimestamp', 0)).strftime('%H:%M')}] {j['homeTeam']['name']} x {j['awayTeam']['name']}": j for j in jogos_f}
+        escolha = st.selectbox("🎯 Escolha uma partida:", list(lista_nomes.keys()))
         
-        if st.button("🔍 ANALISAR AGORA"):
-            st.session_state.jogo_selecionado = opcoes[escolha]
+        if st.button("🔍 GERAR RELATÓRIO PREDITIVO"):
+            st.session_state.jogo_selecionado = lista_nomes[escolha]
             st.session_state.analise_pronta = True
-    else:
-        st.info("💡 Escolha uma liga para ver os jogos.")
-else:
-    st.warning(f"Nenhum jogo encontrado para {data_str}. Tente uma data futura.")
 
 # --- RESULTADOS ---
 if st.session_state.analise_pronta and st.session_state.jogo_selecionado:
-    j = st.session_state.jogo_selecionado
+    jogo = st.session_state.jogo_selecionado
     st.divider()
     
-    h_jogo = ajustar_horario(j.get('startTimestamp', 0))
-    st.markdown(f"<h1 style='text-align:center; color:#ffc107;'>{j['homeTeam']['name']} vs {j['awayTeam']['name']}</h1>", unsafe_allow_html=True)
-    st.markdown(f"<p style='text-align:center; color:#888;'>{j['tournament']['name']} • {h_jogo} (Horário de Brasília)</p>", unsafe_allow_html=True)
+    id_casa = jogo['homeTeam']['id']
+    id_fora = jogo['awayTeam']['id']
+    logo_casa = f"https://api.sofascore.app/api/v1/team/{id_casa}/image"
+    logo_fora = f"https://api.sofascore.app/api/v1/team/{id_fora}/image"
 
-    # Exemplo de Probabilidades
+    h_atq, h_def, a_atq, a_def = buscar_estatisticas_completas(
+        jogo['tournament']['id'], jogo['season']['id'], id_casa, id_fora
+    )
+    p_c, p_e, p_f, l_h, l_a = prever_1x2_avancado(h_atq, h_def, a_atq, a_def)
+    m_total = l_h + l_a
+
+    # Cabeçalho Visual
+    col_l1, col_mid, col_l2 = st.columns([1, 4, 1])
+    with col_l1: st.image(logo_casa, width=100)
+    with col_mid:
+        st.markdown(f"<h1 style='text-align: center;'>{jogo['homeTeam']['name']} vs {jogo['awayTeam']['name']}</h1>", unsafe_allow_html=True)
+        st.markdown(f"<p style='text-align: center; color: #888;'>{jogo['tournament']['name']} • {datetime.fromtimestamp(jogo.get('startTimestamp', 0)).strftime('%d/%m/%Y %H:%M')}</p>", unsafe_allow_html=True)
+    with col_l2: st.image(logo_fora, width=100)
+    
+    # Probabilidades de Vitória
     c1, c2, c3 = st.columns(3)
-    c1.markdown("<div class='res-box' style='background-color:#1f77b4;'>Casa: 48.5%</div>", unsafe_allow_html=True)
-    c2.markdown("<div class='res-box' style='background-color:#444;'>Empate: 22.1%</div>", unsafe_allow_html=True)
-    c3.markdown("<div class='res-box' style='background-color:#dc3545;'>Fora: 29.4%</div>", unsafe_allow_html=True)
+    c1.markdown(f"<div class='res-box' style='background-color:#1f77b4;'>Casa: {p_c:.1f}%</div>", unsafe_allow_html=True)
+    c2.markdown(f"<div class='res-box' style='background-color:#444;'>Empate: {p_e:.1f}%</div>", unsafe_allow_html=True)
+    c3.markdown(f"<div class='res-box' style='background-color:#dc3545;'>Fora: {p_f:.1f}%</div>", unsafe_allow_html=True)
 
-    st.divider()
-    col_g, col_c, col_k = st.columns(3)
+    # Mercados Secundários (Gols, Cantos, Cartões)
+    st.markdown("<br>", unsafe_allow_html=True)
+    m1, m2, m3 = st.columns(3)
+    
+    with m1:
+        st.markdown("<div class='section-title'>⚽ GOLS</div>", unsafe_allow_html=True)
+        # Gerando as duas métricas juntas para garantir a exibição
+        html_gols = formatar_metric('Over 1.5', calcular_poisson(m_total, 1))
+        html_gols += formatar_metric('Over 2.5', calcular_poisson(m_total, 2))
+        st.markdown(f"<div class='metric-card'>{html_gols}</div>", unsafe_allow_html=True)
 
-    def render_bloco(titulo, itens):
-        html = f"### {titulo}<div class='metric-container'>"
-        for label, prob in itens:
-            cor = get_color(prob)
-            html += f"<div class='metric-row'><span>{label}</span><span style='color:{cor}; font-weight:bold;'>{prob:.1f}%</span></div>"
-        html += "</div>"
-        return html
+    with m2:
+        st.markdown("<div class='section-title'>🚩 CANTOS</div>", unsafe_allow_html=True)
+        html_cantos = formatar_metric('Over 8.5', calcular_poisson(9.5, 8))
+        html_cantos += formatar_metric('Over 10.5', calcular_poisson(9.5, 10))
+        st.markdown(f"<div class='metric-card'>{html_cantos}</div>", unsafe_allow_html=True)
 
-    # Usando média padrão 2.5 para o exemplo
-    with col_g:
-        st.markdown(render_bloco("⚽ GOLS", [("Over 1.5", calcular_poisson(2.5, 1)), ("Over 2.5", calcular_poisson(2.5, 2))]), unsafe_allow_html=True)
-    with col_c:
-        st.markdown(render_bloco("🚩 CANTOS", [("Over 8.5", calcular_poisson(9.5, 8)), ("Over 10.5", calcular_poisson(9.5, 10))]), unsafe_allow_html=True)
-    with col_k:
-        st.markdown(render_bloco("🟨 CARTÕES", [("Over 3.5", calcular_poisson(4.2, 3)), ("Over 4.5", calcular_poisson(4.2, 4))]), unsafe_allow_html=True)
+    with m3:
+        st.markdown("<div class='section-title'>🟨 CARTÕES</div>", unsafe_allow_html=True)
+        html_cards = formatar_metric('Over 3.5', calcular_poisson(4.2, 3))
+        html_cards += formatar_metric('Over 4.5', calcular_poisson(4.2, 4))
+        st.markdown(f"<div class='metric-card'>{html_cards}</div>", unsafe_allow_html=True)
+
+    st.caption("⭐ = Alta Confiança (+85%) | Modelo: Força de Ataque vs Fragilidade Defensiva")
+
+elif not jogos:
+    st.warning("Nenhum jogo disponível para esta data.")
