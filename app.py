@@ -25,23 +25,24 @@ def calcular_poisson(media, alvo):
 def formatar_metric(label, prob):
     cor = "#dc3545" if prob < 50 else ("#ffc107" if prob < 75 else "#28a745")
     estrela = "⭐" if prob >= 85 else ""
-    # Retorna HTML puro para ser usado com markdown
+    # Retorna a estrutura HTML de cada linha da métrica
     return f"""
-    <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;'>
+    <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #2d333b; padding-bottom: 5px;'>
         <span style='color:#bbb; font-size:14px;'>{label}</span>
         <span style='color:{cor}; font-weight:bold; font-size:18px;'>{prob:.1f}% {estrela}</span>
     </div>
     """
 
 # --- INTERFACE ---
-st.set_page_config(page_title="PROBET v4.0", layout="wide")
+st.set_page_config(page_title="PROBET v4.1", layout="wide")
 
 st.markdown("""
     <style>
     .stApp { background-color: #0e1117; color: white; }
     .res-box { text-align: center; padding: 15px; border-radius: 8px; font-weight: bold; color: white; margin-bottom: 10px; font-size: 20px; }
-    .metric-card { background-color: #1c2128; padding: 15px; border-radius: 10px; border: 1px solid #30363d; min-height: 80px; }
+    .metric-card { background-color: #1c2128; padding: 15px; border-radius: 10px; border: 1px solid #30363d; min-height: 100px; }
     h1, h2, h3 { color: #ffc107 !important; text-align: center; }
+    .section-header { color: #ffc107; font-weight: bold; margin-bottom: 10px; font-size: 1.2rem; display: flex; align-items: center; gap: 10px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -74,16 +75,16 @@ if jogos:
             st.session_state.jogo_selecionado = opcoes[escolha]
             st.session_state.analise_pronta = True
 
-# --- RESULTADOS (REMOVIDO ESCUDOS E CORRIGIDO HTML) ---
+# --- EXIBIÇÃO ---
 if st.session_state.get('analise_pronta') and st.session_state.get('jogo_selecionado'):
     j = st.session_state.jogo_selecionado
     st.divider()
     
-    # Cabeçalho Centralizado (Sem colunas para escudos)
+    # Título e Horário (Sem escudos para evitar erro de imagem 0)
     st.markdown(f"<h1>{j['homeTeam']['name']} vs {j['awayTeam']['name']}</h1>", unsafe_allow_html=True)
     st.markdown(f"<p style='text-align: center; font-size: 16px; color: #888;'>{j['tournament']['name']} • {ajustar_horario(j.get('startTimestamp', 0))} (Brasília)</p>", unsafe_allow_html=True)
 
-    # Probabilidades (Simuladas para exemplo, use sua função prever_1x2_avancado aqui)
+    # Probabilidades 1X2 (Fixas conforme seu modelo anterior)
     st.write("### Probabilidades 1X2")
     c1, c2, c3 = st.columns(3)
     c1.markdown(f"<div class='res-box' style='background-color:#1f77b4;'>Casa: 65.0%</div>", unsafe_allow_html=True)
@@ -92,26 +93,20 @@ if st.session_state.get('analise_pronta') and st.session_state.get('jogo_selecio
 
     st.divider()
     
-    # Mercados Secundários
+    # Mercados Secundários (GOLS, CANTOS, CARTÕES)
     m1, m2, m3 = st.columns(3)
     
-    # Média total fictícia para cálculo (Substitua pela sua lógica l_h + l_a)
+    # Médias para o cálculo de Poisson (Exemplo)
     m_total = 2.8 
 
     with m1:
-        st.markdown("### ⚽ GOLS", unsafe_allow_html=True)
+        st.markdown("<div class='section-header'>⚽ GOLS</div>", unsafe_allow_html=True)
         html_gols = formatar_metric("Over 1.5", calcular_poisson(m_total, 1))
         html_gols += formatar_metric("Over 2.5", calcular_poisson(m_total, 2))
         st.markdown(f"<div class='metric-card'>{html_gols}</div>", unsafe_allow_html=True)
 
     with m2:
-        st.markdown("### 🚩 CANTOS", unsafe_allow_html=True)
+        st.markdown("<div class='section-header'>🚩 CANTOS</div>", unsafe_allow_html=True)
         html_cantos = formatar_metric("Over 8.5", calcular_poisson(9.5, 8))
         html_cantos += formatar_metric("Over 10.5", calcular_poisson(9.5, 10))
-        st.markdown(f"<div class='metric-card'>{html_cantos}</div>", unsafe_allow_html=True)
-
-    with m3:
-        st.markdown("### 🟨 CARTÕES", unsafe_allow_html=True)
-        html_cards = formatar_metric("Over 3.5", calcular_poisson(4.2, 3))
-        html_cards += formatar_metric("Over 4.5", calcular_poisson(4.2, 4))
-        st.markdown(f"<div class='metric-card'>{html_cards}</div>", unsafe_allow_html=True)
+        st.markdown(f"
