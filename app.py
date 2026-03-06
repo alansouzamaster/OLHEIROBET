@@ -8,87 +8,60 @@ API_KEY = "a19cf6b5fcmsh62790bdb0d293ddp131982jsn24158e88f703"
 HOST = "sportapi7.p.rapidapi.com"
 HEADERS = {"X-RapidAPI-Key": API_KEY, "X-RapidAPI-Host": HOST}
 
+# --- FUNÇÕES DE CÁLCULO ---
+def calcular_poisson(media, alvo):
+    if media <= 0: return 0
+    prob_acumulada = 0
+    for i in range(int(alvo) + 1):
+        prob_i = (math.exp(-media) * (media**i)) / math.factorial(i)
+        prob_acumulada += prob_i
+    return (1 - prob_acumulada) * 100
+
+def prever_1x2(m_casa, m_fora):
+    total = m_casa + m_fora
+    p_empate = 26.0
+    sobra = 100 - p_empate
+    if total > 0:
+        p_casa = sobra * (m_casa / total)
+        p_fora = sobra * (m_fora / total)
+    else:
+        p_casa = p_fora = sobra / 2
+    return p_casa, p_empate, p_fora
+
 @st.cache_data(ttl=86400)
-def buscar_elenco_e_cartoes(team_id, tournament_id, season_id):
-    """Busca TODOS os jogadores do elenco e suas estatísticas de cartões."""
+def buscar_medias_reais(tournament_id, season_id, home_id, away_id):
     try:
-        # Busca a lista de jogadores do time na temporada
-        url_team = f"https://{HOST}/api/v1/team/{team_id}/unique-tournament/{tournament_id}/season/{season_id}/statistics/overall"
-        # Nota: Algumas APIs exigem buscar os jogadores individualmente ou via endpoint de 'players'
-        # Usaremos a lógica de busca por elenco (Squad)
+        url = f"https://{HOST}/api/v1/tournament/{tournament_id}/season/{season_id}/standings/total"
+        response = requests.get(url, headers=HEADERS, timeout=12)
+        if response.status_code == 200:
+            data = response.json()
+            standings_list = data.get('standings', [])
+            if not standings_list: return 1.5, 1.0
+            rows = standings_list[0].get('rows', [])
+            m_casa, m_fora = 1.4, 1.1
+            for row in rows:
+                t_id = row['team']['id']
+                jogos = row.get('matches', 1) or 1
+                if t_id == home_id: m_casa = row.get('scoresFor', 0)/jogos
+                if t_id == away_id: m_fora = row.get('scoresFor', 0)/jogos
+            return round(m_casa, 2), round(m_fora, 2)
+    except: return 1.5, 1.0
+    return 1.5, 1.0
+
+@st.cache_data(ttl=3600)
+def buscar_cartoes_elenco(team_id, tournament_id, season_id):
+    """Busca estatísticas de cartões de TODOS os jogadores do elenco."""
+    try:
         url_squad = f"https://{HOST}/api/v1/team/{team_id}/players"
         res = requests.get(url_squad, headers=HEADERS, timeout=10)
-        
         if res.status_code != 200: return []
         
-        players_data = res.json().get('players', [])
-        lista_completa = []
+        players_list = res.json().get('players', [])
+        dados_elenco = []
 
-        # Para cada jogador do elenco, buscamos a métrica de cartões
-        for p in players_data:
+        for p in players_list:
             p_obj = p.get('player', {})
             p_id = p_obj.get('id')
             
-            # Busca estatística individual
-            url_stats = f"https://{HOST}/api/v1/player/{p_id}/unique-tournament/{tournament_id}/season/{season_id}/statistics/overall"
-            res_s = requests.get(url_stats, headers=HEADERS, timeout=10)
-            
-            if res_s.status_code == 200:
-                s = res_s.json().get('statistics', {})
-                amarelos = s.get('yellowCards', 0)
-                partidas = s.get('appearances', 1) or 1
-                if amarelos > 0: # Filtramos apenas quem já tomou cartão para dar relevância
-                    prob = (amarelos / partidas) * 100
-                    lista_completa.append({
-                        "nome": p_obj.get('name'),
-                        "posicao": p_obj.get('position', 'N/A'),
-                        "amarelos": amarelos,
-                        "jogos": partidas,
-                        "prob": round(min(prob, 99), 1)
-                    })
-        
-        # Ordena pelos jogadores mais "faltosos"
-        return sorted(lista_completa, key=lambda x: x['prob'], reverse=True)
-    except:
-        return []
-
-# --- NA PARTE DO RESULTADO DA ANÁLISE (DENTRO DO if btn_analise) ---
-
-if btn_analise and jogo_selecionado:
-    # ... (Seu código anterior de médias e 1X2) ...
-
-    st.markdown("### 📋 ANÁLISE COMPLETA DO ELENCO (CARTÕES)")
-    
-    tab_casa, tab_fora = st.tabs([jogo_selecionado['homeTeam']['name'], jogo_selecionado['awayTeam']['name']])
-    
-    with tab_casa:
-        st.write("🔎 Jogadores do elenco com maior tendência a cartão:")
-        elenco_h = buscar_elenco_e_cartoes(
-            jogo_selecionado['homeTeam']['id'], 
-            jogo_selecionado['tournament']['id'], 
-            jogo_selecionado['season']['id']
-        )
-        if elenco_h:
-            for p in elenco_h:
-                with st.expander(f"🟨 {p['prob']}% - {p['nome']} ({p['posicao']})"):
-                    st.write(f"O jogador recebeu **{p['amarelos']} cartões amarelos** em **{p['jogos']} jogos** nesta competição.")
-                    st.progress(p['prob'] / 100)
-        else:
-            st.info("Sem dados de cartões para este elenco no momento.")
-
-    with tab_fora:
-        st.write("🔎 Jogadores do elenco com maior tendência a cartão:")
-        elenco_a = buscar_elenco_e_cartoes(
-            jogo_selecionado['awayTeam']['id'], 
-            jogo_selecionado['tournament']['id'], 
-            jogo_selecionado['season']['id']
-        )
-        if elenco_a:
-            for p in elenco_a:
-                with st.expander(f"🟨 {p['prob']}% - {p['nome']} ({p['posicao']})"):
-                    st.write(f"O jogador recebeu **{p['amarelos']} cartões amarelos** em **{p['jogos']} jogos** nesta competição.")
-                    st.progress(p['prob'] / 100)
-        else:
-            st.info("Sem dados de cartões para este elenco no momento.")
-
-    # ... (Restante do seu código de Gols e Cantos) ...
+            # Busca estatísticas na temporada/liga específica
+            url_stats = f"https://{HOST}/api/v1/player/{p_id}/unique-tournament/{tournament_id}/season/{season_
