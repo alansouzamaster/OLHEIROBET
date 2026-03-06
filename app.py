@@ -104,7 +104,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("👑PRO ANÁLISE👑")
+st.title("PRO ANÁLISE")
 
 # --- FILTROS ---
 data_sel = st.date_input("📅 Data", value=datetime.now())
@@ -179,4 +179,5 @@ if st.session_state.analise_pronta and st.session_state.jogo_selecionado:
     if st.button("🗑️ NOVA CONSULTA"):
         st.session_state.analise_pronta = False
         st.rerun()
+
 
