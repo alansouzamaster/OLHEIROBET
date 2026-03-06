@@ -23,18 +23,18 @@ def calcular_poisson(media, alvo):
     return (1 - prob_acumulada) * 100
 
 def get_color(prob):
-    if prob >= 70: return "#28a745"
-    if prob >= 50: return "#ffc107"
-    return "#dc3545"
+    if prob >= 70: return "#28a745" # Verde
+    if prob >= 50: return "#ffc107" # Amarelo
+    return "#dc3545" # Vermelho
 
 def prever_1x2_avancado(h_atq, h_def, a_atq, a_def):
-    l_casa = h_atq * a_def * 1.10 
-    l_fora = a_atq * h_def * 0.90 
-    total = l_casa + l_fora
+    lambda_casa = h_atq * a_def * 1.10 
+    lambda_fora = a_atq * h_def * 0.90 
+    total = lambda_casa + lambda_fora
     p_empate = 31.0 if total < 2.2 else 26.0
     sobra = 100 - p_empate
-    p_casa = sobra * (l_casa / total) if total > 0 else sobra / 2
-    p_fora = sobra * (l_fora / total) if total > 0 else sobra / 2
+    p_casa = sobra * (lambda_casa / total) if total > 0 else sobra / 2
+    p_fora = sobra * (lambda_fora / total) if total > 0 else sobra / 2
     return p_casa, p_empate, p_fora, total
 
 @st.cache_data(ttl=86400)
@@ -64,7 +64,6 @@ st.markdown("""
     .metric-container { background-color: #1c2128; padding: 15px; border-radius: 10px; border: 1px solid #30363d; margin-top: 5px; }
     .metric-row { display: flex; justify-content: space-between; margin-bottom: 8px; align-items: center; border-bottom: 1px solid #2d333b; padding-bottom: 5px; }
     .metric-row:last-child { border-bottom: none; }
-    .star-icon { color: #ffc107; font-weight: bold; margin-left: 5px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -96,11 +95,12 @@ if jogos:
             st.session_state.jogo_selecionado = lista[escolha]
             st.session_state.analise_pronta = True
 
-# --- EXIBIÇÃO ---
+# --- EXIBIÇÃO DE RESULTADOS ---
 if st.session_state.analise_pronta and st.session_state.jogo_selecionado:
     j = st.session_state.jogo_selecionado
     st.divider()
     
+    # IDs e Logos
     id_h, id_a = j['homeTeam']['id'], j['awayTeam']['id']
     logo_h = f"https://api.sofascore.app/api/v1/team/{id_h}/image"
     logo_a = f"https://api.sofascore.app/api/v1/team/{id_a}/image"
@@ -108,41 +108,47 @@ if st.session_state.analise_pronta and st.session_state.jogo_selecionado:
     h_atq, h_def, a_atq, a_def = buscar_estatisticas(j['tournament']['id'], j['season']['id'], id_h, id_a)
     p_c, p_e, p_f, m_t = prever_1x2_avancado(h_atq, h_def, a_atq, a_def)
 
-    # Topo
+    # Cabeçalho
     c_l1, c_mid, c_l2 = st.columns([1, 4, 1])
     with c_l1: st.image(logo_h, width=100)
     with c_mid:
         st.markdown(f"<h1 style='text-align: center; color:#ffc107;'>{j['homeTeam']['name']} vs {j['awayTeam']['name']}</h1>", unsafe_allow_html=True)
-        st.markdown(f"<p style='text-align: center; font-size: 1.1rem;'>{j['tournament']['name']} • {datetime.fromtimestamp(j.get('startTimestamp', 0)).strftime('%H:%M')}</p>", unsafe_allow_html=True)
+        st.markdown(f"<p style='text-align: center; font-size: 1.2rem;'>{j['tournament']['name']} • {datetime.fromtimestamp(j.get('startTimestamp', 0)).strftime('%H:%M')}</p>", unsafe_allow_html=True)
     with c_l2: st.image(logo_a, width=100)
 
-    # 1X2
+    # Probabilidades 1X2
     v1, v2, v3 = st.columns(3)
     v1.markdown(f"<div class='res-box' style='background-color:#1f77b4;'>Casa: {p_c:.1f}%</div>", unsafe_allow_html=True)
     v2.markdown(f"<div class='res-box' style='background-color:#444;'>Empate: {p_e:.1f}%</div>", unsafe_allow_html=True)
     v3.markdown(f"<div class='res-box' style='background-color:#dc3545;'>Fora: {p_f:.1f}%</div>", unsafe_allow_html=True)
 
-    # Blocos de Métricas (Revisados)
+    # Mercados Detalhados
     st.divider()
     m1, m2, m3 = st.columns(3)
 
-    def criar_bloco_html(titulo, dados):
-        html = f"### {titulo}<div class='metric-container'>"
-        for label, val in dados:
-            cor = get_color(val)
-            estrela = "<span class='star-icon'>⭐</span>" if val >= 85 else ""
-            html += f"<div class='metric-row'><span style='color:#bbb;'>{label}</span><span style='color:{cor}; font-weight:bold; font-size:20px;'>{val:.1f}%{estrela}</span></div>"
+    def draw_box(title, items):
+        st.markdown(f"### {title}")
+        html = "<div class='metric-container'>"
+        for label, prob in items:
+            color = get_color(prob)
+            star = "⭐" if prob >= 85 else ""
+            html += f"""
+            <div class='metric-row'>
+                <span style='color:#bbb;'>{label}</span>
+                <span style='color:{color}; font-weight:bold; font-size:20px;'>{prob:.1f}% {star}</span>
+            </div>
+            """
         html += "</div>"
-        return html
+        st.markdown(html, unsafe_allow_html=True)
 
     with m1:
-        st.markdown(criar_bloco_html("⚽ GOLS", [("Over 1.5", calcular_poisson(m_t, 1)), ("Over 2.5", calcular_poisson(m_t, 2))]), unsafe_allow_html=True)
+        draw_box("⚽ GOLS", [("Over 1.5", calcular_poisson(m_t, 1)), ("Over 2.5", calcular_poisson(m_t, 2))])
     with m2:
-        st.markdown(criar_bloco_html("🚩 CANTOS", [("Over 8.5", calcular_poisson(9.5, 8)), ("Over 10.5", calcular_poisson(9.5, 10))]), unsafe_allow_html=True)
+        draw_box("🚩 CANTOS", [("Over 8.5", calcular_poisson(9.5, 8)), ("Over 10.5", calcular_poisson(9.5, 10))])
     with m3:
-        st.markdown(criar_bloco_html("🟨 CARTÕES", [("Over 3.5", calcular_poisson(4.2, 3)), ("Over 4.5", calcular_poisson(4.2, 4))]), unsafe_allow_html=True)
+        draw_box("🟨 CARTÕES", [("Over 3.5", calcular_poisson(4.2, 3)), ("Over 4.5", calcular_poisson(4.2, 4))])
 
-    st.caption("⭐ Destaque de probabilidade acima de 85%. Modelo baseado em médias históricas e Poisson.")
+    st.caption("⭐ Probabilidade de Alta Confiança (+85%). Cálculos baseados em Poisson e Médias de Temporada.")
 
 elif not jogos:
-    st.info("Nenhum jogo encontrado para a data selecionada.")
+    st.info("Nenhum jogo encontrado para esta data.")
