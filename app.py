@@ -92,4 +92,5 @@ jogo_selecionado = None
 
 st.title("⚽ PROBET ANALISE - ELENCO COMPLETO")
 
-data_sel = st.date_input("
+data_sel = st.date_input")
+
