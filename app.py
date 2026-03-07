@@ -193,3 +193,4 @@ if st.session_state.analise_pronta and st.session_state.jogo_selecionado:
 
 
 
+
