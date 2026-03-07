@@ -4,7 +4,7 @@ import math
 from datetime import datetime, timedelta
 
 # --- CONFIGURAÇÃO DA API ---
-API_KEY = "f156796042mshc79c7a43c6d7ac5p1d957fjsn2d444cafcca1"
+API_KEY = "d74c518c70msh5ebd0929eba4206p11d4f7jsn29d95ea7578a"
 HOST = "sportapi7.p.rapidapi.com"
 HEADERS = {"X-RapidAPI-Key": API_KEY, "X-RapidAPI-Host": HOST}
 
@@ -190,5 +190,6 @@ if st.session_state.analise_pronta and st.session_state.jogo_selecionado:
     if st.button("🗑️ REINICIAR"):
         st.session_state.analise_pronta = False
         st.rerun()
+
 
 
